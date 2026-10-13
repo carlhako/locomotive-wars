@@ -4,23 +4,52 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Locomotive Wars</title>
-    <style>
-      html,
-      body {
-        margin: 0;
-        height: 100%;
-        overflow: hidden;
-        background: #0b0f14;
-      }
-      #game {
-        display: block;
-        width: 100vw;
-        height: 100vh;
-      }
-    </style>
   </head>
   <body>
     <canvas id="game"></canvas>
+    <div id="damage-flash"></div>
+    <div id="ui">
+      <div id="leaderboard" class="panel">
+        <h2>Leaderboard</h2>
+        <div id="leaderboard-rows"></div>
+      </div>
+      <div id="stats" class="panel">
+        <div class="row">
+          <span class="key">Carriages</span><span class="val" id="carriages">1</span>
+        </div>
+        <div class="row">
+          <span class="key">Hull</span><span class="val" id="hp-val">100%</span>
+        </div>
+        <div class="row">
+          <div class="bar hp" style="width: 100%"><div id="hp" style="width: 100%"></div></div>
+        </div>
+        <div class="row">
+          <span class="key">Boost Fuel</span><span class="val" id="boost-val">100%</span>
+        </div>
+        <div class="bar boost"><div id="fuel" style="width: 100%"></div></div>
+      </div>
+      <div id="boss-hud">
+        <div class="name" id="boss-name"></div>
+        <div class="hp-bg"><div class="hp-fg" id="boss-hp" style="width: 100%"></div></div>
+      </div>
+      <div id="bridge-indicator">⚡ BRIDGE ACTIVE ⚡</div>
+      <div id="minimap-panel" class="panel">
+        <h3>Minimap</h3>
+        <canvas id="minimap" width="180" height="180"></canvas>
+      </div>
+      <div id="tips">
+        <div><kbd>A</kbd><kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> Turn</div>
+        <div><kbd>Space</kbd> Boost</div>
+        <div><kbd>S</kbd> or <kbd>↓</kbd> Brake</div>
+        <div><kbd>Mouse</kbd> Aim weapons</div>
+        <div class="bridge-tip">⚡ Loop over your trail safely — bridge forms!</div>
+      </div>
+      <div id="combo"></div>
+      <div id="killfeed"></div>
+      <div id="banner"></div>
+    </div>
+    <button id="mute-btn">🔊 Sound: On</button>
+    <div id="notice"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

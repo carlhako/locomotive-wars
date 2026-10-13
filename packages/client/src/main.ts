@@ -1,30 +1,32 @@
-import { GAME_TITLE } from '@lw/shared';
+import './hud/styles.css';
+import { Game } from './loop.ts';
+import { OfflineSession } from './offline.ts';
 
-const canvas = document.getElementById('game');
-if (!(canvas instanceof HTMLCanvasElement)) {
-  throw new Error('Missing #game canvas');
-}
-const ctx = canvas.getContext('2d');
-if (!ctx) {
-  throw new Error('2D canvas context unavailable');
+/** `?offline` (any value) runs the shared simulation in this tab with bots, no server needed. */
+function wantsOffline(search: string): boolean {
+  return new URLSearchParams(search).has('offline');
 }
 
-const draw = (): void => {
-  const dpr = window.devicePixelRatio || 1;
-  const width = window.innerWidth;
-  const height = window.innerHeight;
-  canvas.width = Math.floor(width * dpr);
-  canvas.height = Math.floor(height * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+function showNotice(message: string): void {
+  const el = document.getElementById('notice');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.add('show');
+}
 
-  ctx.fillStyle = '#0b0f14';
-  ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = '#e8eef5';
-  ctx.font = '32px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(GAME_TITLE, width / 2, height / 2);
-};
-
-window.addEventListener('resize', draw);
-draw();
+if (wantsOffline(window.location.search)) {
+  document.body.classList.add('playing');
+  const session = new OfflineSession();
+  const game = new Game(session);
+  game.start();
+  if (import.meta.env.DEV) {
+    // Exposed for poking at the running game from the dev console.
+    (window as unknown as { __lw: { game: Game; session: OfflineSession } }).__lw = {
+      game,
+      session,
+    };
+  }
+} else {
+  // Networked play arrives with change 04; until then the offline harness is the only mode.
+  showNotice('Online play is not available yet. Open this page with ?offline to play locally.');
+}
