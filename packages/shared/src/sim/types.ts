@@ -1,0 +1,262 @@
+/**
+ * Plain-data types for the headless simulation. Everything here is JSON-serializable so the
+ * server can snapshot it and tests can compare worlds structurally.
+ */
+
+export type WeaponKind = 'mg' | 'missile' | 'laser';
+export type DefenseKind = 'shield' | 'drones' | 'armor';
+export type SupportKind = 'speed' | 'magnet' | 'fuel';
+/** What a trailer or dropped pickup holds, and the carriage it becomes. */
+export type PickupKind = WeaponKind | DefenseKind | SupportKind;
+export type CarriageKind = 'locomotive' | PickupKind;
+
+export type EnemyKind = 'drone' | 'hunter' | 'sentry' | 'boss';
+export type ProjectileKind = 'bullet' | 'missile' | 'laser' | 'drone' | 'enemy';
+export type Controller = 'human' | 'bot';
+/** Who owns a projectile, took damage, or dealt it. Trains and enemies share one id space. */
+export type EntityKind = 'train' | 'enemy';
+
+export interface DamageSource {
+  kind: EntityKind;
+  id: number;
+}
+
+/** Per-tick control input. Humans and bots both produce exactly this. */
+export interface TrainInput {
+  /** -1 (left) to 1 (right). */
+  turn: number;
+  boost: boolean;
+  brake: boolean;
+  /** World-space aim angle in radians. */
+  aim: number;
+}
+
+/** One sample of the head's trail; `s` is the cumulative arc length travelled at the sample. */
+export interface PathSample {
+  x: number;
+  y: number;
+  angle: number;
+  s: number;
+}
+
+export interface Carriage {
+  kind: CarriageKind;
+  x: number;
+  y: number;
+  /** Direction of travel at the carriage's position on the trail. */
+  angle: number;
+}
+
+export interface Drone {
+  /** Orbit angle around the train head. */
+  angle: number;
+  fireTimer: number;
+}
+
+export type BotMode = 'wander' | 'seek' | 'attack' | 'flee';
+
+/** Bot controller memory. Present on every train, only used while `controller === 'bot'`. */
+export interface BotState {
+  mode: BotMode;
+  /** Seconds until the next decision. */
+  decisionTimer: number;
+  /** Train being fled from or attacked, if any. */
+  targetTrainId: number | null;
+  /** Position being steered at in seek and wander modes. */
+  targetX: number;
+  targetY: number;
+}
+
+export interface TrainState {
+  id: number;
+  name: string;
+  color: string;
+  controller: Controller;
+  alive: boolean;
+  /** Head position and heading (heading is unbounded; use shortAngle to compare). */
+  x: number;
+  y: number;
+  angle: number;
+  hull: number;
+  maxHull: number;
+  fuel: number;
+  input: TrainInput;
+  /** True after boost drained the tank, until the boost input is released. */
+  boostLocked: boolean;
+  /** True on a tick the train moved at boost speed (for client effects). */
+  boosting: boolean;
+  /** True while the head is within bridge range of its own trail. */
+  bridgeActive: boolean;
+  /** Index 0 is the locomotive. */
+  carriages: Carriage[];
+  /** Weapon cooldowns, parallel to `carriages`. */
+  fireTimers: number[];
+  drones: Drone[];
+  armorBonus: number;
+  speedBonus: number;
+  fuelBonus: number;
+  magnetBonus: number;
+  /** Damage reduction from shield carriages before the cap. */
+  damageReduction: number;
+  path: PathSample[];
+  ai: BotState;
+}
+
+export interface EnemyState {
+  id: number;
+  kind: EnemyKind;
+  x: number;
+  y: number;
+  angle: number;
+  hull: number;
+  maxHull: number;
+  speed: number;
+  damage: number;
+  shootTimer: number;
+  moveTimer: number;
+  targetAngle: number;
+  /** Boss only: display name; empty for other enemies. */
+  name: string;
+  /** Boss only: current angle around its orbit target. */
+  orbitAngle: number;
+}
+
+export interface Projectile {
+  id: number;
+  kind: ProjectileKind;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  damage: number;
+  /** Seconds remaining. */
+  life: number;
+  /** Splash radius against enemies; 0 for none. */
+  splash: number;
+  ownerKind: EntityKind;
+  ownerId: number;
+}
+
+/** A trailer on the map or a dropped pickup. `age` only advances for drops. */
+export interface Pickup {
+  id: number;
+  x: number;
+  y: number;
+  kind: PickupKind;
+  age: number;
+}
+
+export type SimEvent =
+  | {
+      type: 'fired';
+      weapon: ProjectileKind;
+      ownerKind: EntityKind;
+      ownerId: number;
+      x: number;
+      y: number;
+      angle: number;
+    }
+  | {
+      type: 'hit';
+      victimKind: EntityKind;
+      victimId: number;
+      attackerKind: EntityKind | null;
+      attackerId: number | null;
+      /** Damage actually applied (after shield reduction for trains). */
+      amount: number;
+      x: number;
+      y: number;
+    }
+  | {
+      type: 'enemyDestroyed';
+      enemyId: number;
+      enemyKind: Exclude<EnemyKind, 'boss'>;
+      /** Train that earned the kill, if any. */
+      sourceId: number | null;
+      x: number;
+      y: number;
+    }
+  | {
+      type: 'trainDestroyed';
+      victimId: number;
+      sourceKind: EntityKind | null;
+      sourceId: number | null;
+      x: number;
+      y: number;
+    }
+  | {
+      type: 'pickup';
+      trainId: number;
+      pickupId: number;
+      carriage: PickupKind;
+      source: 'trailer' | 'drop';
+      /** False when the train was at its carriage limit and the pickup was only consumed. */
+      added: boolean;
+      x: number;
+      y: number;
+    }
+  | { type: 'bridgeOn'; trainId: number; x: number; y: number }
+  | { type: 'bridgeOff'; trainId: number; x: number; y: number }
+  | { type: 'bossSpawn'; enemyId: number; name: string; x: number; y: number }
+  | {
+      type: 'bossDown';
+      enemyId: number;
+      name: string;
+      sourceId: number | null;
+      x: number;
+      y: number;
+    };
+
+export interface WorldOptions {
+  /** Seed for the world's random source. Default 1. */
+  seed?: number;
+  /** Ticks per second. Default 30. */
+  tickRate?: number;
+  /** Side length of the square, wrapping world. Default 6000. */
+  mapSize?: number;
+  /** Maximum carriages per train, locomotive included. Default 150. */
+  maxCarriages?: number;
+  /** Arc length between carriages along the head's path. Default 18. */
+  carriageSpacing?: number;
+  /** Trailers the world replenishes up to. Default 60. */
+  maxTrailers?: number;
+  /** Enemies the world replenishes up to. Default 22. */
+  maxEnemies?: number;
+  /** Trailers placed when the world is created. Default 50. */
+  initialTrailers?: number;
+  /** Enemies placed when the world is created. Default 12. */
+  initialEnemies?: number;
+  /** Whether the boss schedule runs. Default true. */
+  boss?: boolean;
+}
+
+export type ResolvedWorldOptions = Required<WorldOptions>;
+
+export interface AddTrainOptions {
+  name?: string;
+  color?: string;
+  controller?: Controller;
+  x?: number;
+  y?: number;
+  /** Initial heading in radians. Random if omitted. */
+  angle?: number;
+  /** Carriages to add behind the locomotive. */
+  carriages?: readonly PickupKind[];
+}
+
+/** Everything that changes as the world runs, in one serializable object. */
+export interface WorldState {
+  tick: number;
+  /** Seconds simulated. */
+  time: number;
+  nextId: number;
+  trains: TrainState[];
+  enemies: EnemyState[];
+  projectiles: Projectile[];
+  trailers: Pickup[];
+  drops: Pickup[];
+  trailerTimer: number;
+  enemyTimer: number;
+  bossTimer: number;
+  bossId: number | null;
+}
