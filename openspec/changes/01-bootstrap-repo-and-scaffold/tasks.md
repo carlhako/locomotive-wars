@@ -29,5 +29,5 @@
 
 - [x] 5.1 Add `.github/workflows/ci.yml` (Node from `.nvmrc`; `npm ci`, typecheck, lint, test, build on push and pull_request); verify locally that the same command sequence passes
 - [x] 5.2 `git init`, create the initial commit, and review the staged file list for secrets or unwanted files; verify with `git status` that the tree is clean
-- [ ] 5.3 Confirm with the user, then run `gh repo create carlhako/locomotive-wars --public --source=. --remote=origin --push`; verify `gh repo view carlhako/locomotive-wars` shows a public repo with the commit
-- [ ] 5.4 Verify the first CI run on GitHub passes (`gh run list --limit 1`)
+- [x] 5.3 Confirm with the user, then run `gh repo create carlhako/locomotive-wars --public --source=. --remote=origin --push`; verify `gh repo view carlhako/locomotive-wars` shows a public repo with the commit
+- [x] 5.4 Verify the first CI run on GitHub passes (`gh run list --limit 1`)
