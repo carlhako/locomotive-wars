@@ -1,0 +1,89 @@
+# Spec Delta
+
+## Purpose
+
+Defines the real-time protocol between browser and server: how inputs travel up, how world state and events travel down, and how the client keeps motion smooth despite latency.
+
+## ADDED Requirements
+
+### Requirement: WebSocket transport with versioned messages
+Clients SHALL connect over WebSocket at `/ws`. The first client message SHALL be `hello` with a protocol version and name. The server SHALL reply `welcome` with the session's train id, tick rate, snapshot rate, and map size. A mismatched protocol version SHALL get `reject` with reason `version`, and the connection SHALL then close.
+
+#### Scenario: Successful handshake
+- **WHEN** a client sends `hello` with the current protocol version
+- **THEN** it receives `welcome` with its train id and starts receiving snapshots
+
+#### Scenario: Outdated client
+- **WHEN** a client sends `hello` with an older protocol version
+- **THEN** it receives `reject` with reason `version` and the socket closes
+
+### Requirement: Input messages
+The client SHALL send `input` messages carrying a sequence number, turn, boost, brake, and aim angle whenever input changes, and at least every 100 ms while playing. The server SHALL apply the most recent valid input to the session's train each tick.
+
+#### Scenario: Input reaches the train
+- **WHEN** a client sends turn = 1 and keeps sending it
+- **THEN** that client's train heading increases on the server at the turn rate
+
+### Requirement: Input validation and rate limit
+The server SHALL clamp turn to [-1, 1] and SHALL reject non-finite aim angles and malformed messages without affecting other sessions. It SHALL drop input messages beyond 60 per second per session. Connections that repeatedly send malformed messages SHALL be closed.
+
+#### Scenario: Out-of-range input
+- **WHEN** a client sends turn = 50
+- **THEN** the server applies turn = 1
+
+#### Scenario: Garbage message
+- **WHEN** a client sends a message that is not valid JSON
+- **THEN** the message is ignored and other players are unaffected
+
+### Requirement: Snapshots
+The server SHALL send each session a `snapshot` at the snapshot rate (default 15 Hz). Each snapshot SHALL include the tick, server time, the last applied input sequence, and full state for that session's own train. It SHALL also include the trains, enemies, trailers, drops, and projectiles within the session's view radius.
+
+#### Scenario: Snapshot cadence
+- **WHEN** a client is connected for 10 seconds
+- **THEN** it receives 150 snapshots, give or take 5%
+
+### Requirement: Interest management
+A snapshot SHALL include an entity only if it is within the view radius (default 1600 units, wrapped distance) of the session's train head. A train SHALL be included if its head or any carriage is within the radius. All sessions SHALL also receive an `overview` of every train's id, head position, and colour at 2 Hz for the minimap.
+
+#### Scenario: Distant entity excluded
+- **WHEN** an enemy is 3000 units from a player's head
+- **THEN** that player's snapshots do not contain it, but the minimap overview still lists every train
+
+#### Scenario: Long train partly in view
+- **WHEN** another train's head is 2500 units away but one of its carriages is 1000 units away
+- **THEN** that train is included in the snapshot
+
+### Requirement: Static train data sent on change
+The server SHALL send each train's name, colour, controller type, and carriage kinds in `meta` messages when a session first sees the train and whenever they change. Snapshots SHALL carry only changing data: positions, angles, hull, fuel, and bridge state.
+
+#### Scenario: New carriage kind announced
+- **WHEN** a visible train picks up a missile trailer
+- **THEN** the session receives a `meta` update listing the new carriage kind before or with the snapshot that shows it
+
+### Requirement: Event delivery
+Snapshots SHALL carry the simulation events since the previous snapshot that are within the session's view radius or involve its train. Train-destroyed events SHALL be delivered to all sessions so the kill feed is global.
+
+#### Scenario: Global kill feed
+- **WHEN** train A destroys train B far from player C
+- **THEN** player C receives the train-destroyed event naming A and B
+
+### Requirement: Time sync and interpolation
+The client SHALL estimate server time from periodic `ping`/`pong` exchanges. It SHALL draw other entities at estimated server time minus an interpolation delay of two snapshot intervals (about 133 ms by default), interpolating between snapshots with wrap-aware position and angle interpolation.
+
+#### Scenario: Smooth remote motion across the seam
+- **WHEN** a remote train moves from x = 5990 to x = 10 between two snapshots
+- **THEN** it is drawn moving smoothly across the seam, not sweeping back across the map
+
+### Requirement: Low-latency local train
+The client SHALL draw its own train from the newest snapshot, extrapolated forward by the time since that snapshot using its heading and speed, rather than applying the interpolation delay.
+
+#### Scenario: Local train is not delayed
+- **WHEN** snapshots arrive regularly and the player is moving straight
+- **THEN** the local train is drawn within one snapshot interval of the server's current position, not 133 ms behind
+
+### Requirement: Disconnect handling
+When the connection closes or no snapshot arrives for 5 seconds, the client SHALL stop sending input and show a disconnected overlay with a reconnect button. Reconnecting SHALL perform a fresh join.
+
+#### Scenario: Server restarts
+- **WHEN** the server process stops while a player is connected
+- **THEN** the client shows the disconnected overlay, and pressing reconnect rejoins once the server is back

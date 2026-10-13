@@ -1,0 +1,8 @@
+dist/
+node_modules/
+coverage/
+reference/
+openspec/
+.claude/
+.pi/
+package-lock.json
