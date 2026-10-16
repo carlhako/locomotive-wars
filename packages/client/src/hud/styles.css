@@ -1,4 +1,4 @@
-/* Ported from reference/locomotive-wars-v4.html (lines 7-94). The overlay screens, trailer legend,
+/* Ported from reference/locomotive-wars-v4.html (lines 7-94). The death screen, trailer legend,
    grace shield, and combo meter are not part of this client yet. */
 * {
   margin: 0;
@@ -424,21 +424,144 @@ body:not(.playing) #damage-flash {
 #mute-btn:hover {
   background: rgba(0, 0, 0, 0.85);
 }
-#notice {
+
+/* Join and disconnect screens, after the reference overlay (lines 36-45). */
+.overlay {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  max-width: 480px;
-  padding: 18px 24px;
-  text-align: center;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(20, 10, 40, 0.85) 0%,
+    rgba(0, 0, 0, 0.95) 100%
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  pointer-events: auto;
+  z-index: 100;
   color: #ccc;
-  font-size: 14px;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(100, 200, 255, 0.3);
-  border-radius: 8px;
-  display: none;
+  cursor: default;
 }
-#notice.show {
-  display: block;
+.overlay h1 {
+  font-size: 76px;
+  font-weight: 900;
+  background: linear-gradient(45deg, #4a9eff, #ff4444);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 8px;
+  letter-spacing: 3px;
+  text-align: center;
+}
+.overlay.death h1 {
+  background: linear-gradient(45deg, #ff4444, #ffaa44);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.overlay .subtitle {
+  color: #888;
+  font-size: 14px;
+  margin-bottom: 24px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+.overlay p {
+  color: #ccc;
+  margin: 5px 0;
+  font-size: 14px;
+}
+.overlay .blurb {
+  color: #aaa;
+  font-size: 13px;
+  max-width: 520px;
+  text-align: center;
+  margin: 8px 30px;
+}
+.overlay .controls {
+  margin-top: 16px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 16px 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.overlay kbd {
+  display: inline-block;
+  margin: 0 2px;
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  font-family: monospace;
+  font-size: 12px;
+  color: #fff;
+}
+#join-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 24px;
+}
+#join-form label {
+  color: #888;
+  font-size: 12px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+#player-name {
+  width: 260px;
+  padding: 10px 14px;
+  border: 1px solid rgba(100, 200, 255, 0.4);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 18px;
+  text-align: center;
+  outline: none;
+}
+#player-name:focus {
+  border-color: #4a9eff;
+  box-shadow: 0 0 14px rgba(74, 158, 255, 0.5);
+}
+#join-error {
+  min-height: 20px;
+  margin-top: 14px;
+  color: #ff7777;
+  font-size: 13px;
+}
+.overlay button {
+  margin-top: 28px;
+  padding: 16px 50px;
+  background: linear-gradient(45deg, #4a9eff, #2980b9);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  box-shadow: 0 0 30px rgba(74, 158, 255, 0.5);
+}
+.overlay button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 0 40px rgba(74, 158, 255, 0.8);
+}
+.overlay button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.overlay.death button {
+  background: linear-gradient(45deg, #ff4444, #c0392b);
+  box-shadow: 0 0 30px rgba(255, 68, 68, 0.5);
+}
+.overlay.death button:hover:not(:disabled) {
+  box-shadow: 0 0 40px rgba(255, 68, 68, 0.8);
 }

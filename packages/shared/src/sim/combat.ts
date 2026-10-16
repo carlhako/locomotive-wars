@@ -109,6 +109,19 @@ export function damageTrain(
   if (train.hull <= 0) destroyTrain(world, train, source);
 }
 
+/** Turns half of a train's carriages (rounded down) into random pickups scattered around them. */
+export function dropCarriages(world: World, train: TrainState): void {
+  const dropCount = Math.floor(train.carriages.length * DEATH_DROP_FRACTION);
+  for (let i = 0; i < dropCount; i++) {
+    const c = train.carriages[i];
+    if (!c) continue;
+    const kind = world.randomPickupKind();
+    const jx = world.rng.range(-DEATH_DROP_JITTER, DEATH_DROP_JITTER);
+    const jy = world.rng.range(-DEATH_DROP_JITTER, DEATH_DROP_JITTER);
+    world.spawnDrop(c.x + jx, c.y + jy, kind);
+  }
+}
+
 /**
  * Marks a train destroyed and turns half its carriages (rounded down) into random pickups
  * scattered around where they were. The train stays in the world, dead, until its owner removes
@@ -123,15 +136,7 @@ export function destroyTrain(world: World, train: TrainState, source: DamageSour
     train.bridgeActive = false;
     world.emit({ type: 'bridgeOff', trainId: train.id, x: train.x, y: train.y });
   }
-  const dropCount = Math.floor(train.carriages.length * DEATH_DROP_FRACTION);
-  for (let i = 0; i < dropCount; i++) {
-    const c = train.carriages[i];
-    if (!c) continue;
-    const kind = world.randomPickupKind();
-    const jx = world.rng.range(-DEATH_DROP_JITTER, DEATH_DROP_JITTER);
-    const jy = world.rng.range(-DEATH_DROP_JITTER, DEATH_DROP_JITTER);
-    world.spawnDrop(c.x + jx, c.y + jy, kind);
-  }
+  dropCarriages(world, train);
   world.emit({
     type: 'trainDestroyed',
     victimId: train.id,

@@ -42,6 +42,11 @@ export class NameBook {
     for (const t of view.trains) this.known.set(t.id, { name: t.name, color: t.color });
   }
 
+  /** Records a train known from outside the view, without overwriting what the view showed. */
+  remember(id: number, name: string, color: string): void {
+    if (!this.known.has(id)) this.known.set(id, { name, color });
+  }
+
   name(id: number | null): string {
     return (id === null ? undefined : this.known.get(id)?.name) ?? 'Unknown';
   }

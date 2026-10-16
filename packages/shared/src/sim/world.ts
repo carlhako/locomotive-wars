@@ -1,5 +1,5 @@
 import { botInput } from './bot.ts';
-import { fireDrones, fireWeapons, ramEnemies, stepProjectiles } from './combat.ts';
+import { dropCarriages, fireDrones, fireWeapons, ramEnemies, stepProjectiles } from './combat.ts';
 import {
   BOSS_INTERVAL,
   BOSS_REPEAT_FACTOR,
@@ -190,10 +190,19 @@ export class World {
     return train;
   }
 
-  removeTrain(id: number): boolean {
-    const before = this.state.trains.length;
+  /**
+   * Removes a train. With `drop`, half of a living train's carriages become pickups as in a
+   * destruction. A living train's removal is reported as a `trainLeft` event, never as a kill.
+   */
+  removeTrain(id: number, opts: { drop?: boolean } = {}): boolean {
+    const train = this.getTrain(id);
+    if (!train) return false;
+    if (train.alive) {
+      if (opts.drop) dropCarriages(this, train);
+      this.emit({ type: 'trainLeft', trainId: id, x: train.x, y: train.y });
+    }
     this.state.trains = this.state.trains.filter((t) => t.id !== id);
-    return this.state.trains.length < before;
+    return true;
   }
 
   /**
@@ -258,11 +267,13 @@ export class World {
     return spawnBoss(this);
   }
 
-  /** Advances the world by one tick and returns that tick's events in order. */
+  /**
+   * Advances the world by one tick and returns that tick's events in order. Events raised
+   * between steps (a train removed by its owner) come first.
+   */
   step(): SimEvent[] {
     const s = this.state;
     const dt = this.dt;
-    this.events = [];
     s.tick += 1;
     s.time += dt;
 
@@ -304,7 +315,9 @@ export class World {
     s.enemies = s.enemies.filter((e) => e.hull > 0);
     this.replenish();
 
-    return this.events;
+    const events = this.events;
+    this.events = [];
+    return events;
   }
 
   // ===== Step phases =====

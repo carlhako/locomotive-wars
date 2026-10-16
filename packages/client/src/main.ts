@@ -1,32 +1,72 @@
 import './hud/styles.css';
 import { Game } from './loop.ts';
+import { NetSession } from './net/connection.ts';
+import { defaultServerUrl } from './net/transport.ts';
 import { OfflineSession } from './offline.ts';
+import { loadName, saveName } from './ui/join.ts';
+import { bindDisconnectScreen, bindJoinScreen, disconnectMessage } from './ui/overlays.ts';
 
 /** `?offline` (any value) runs the shared simulation in this tab with bots, no server needed. */
 function wantsOffline(search: string): boolean {
   return new URLSearchParams(search).has('offline');
 }
 
-function showNotice(message: string): void {
-  const el = document.getElementById('notice');
-  if (!el) return;
-  el.textContent = message;
-  el.classList.add('show');
+/** Exposed for poking at the running game from the dev console. */
+function exposeForDebugging(handles: Record<string, unknown>): void {
+  if (import.meta.env.DEV) (window as unknown as { __lw: unknown }).__lw = handles;
 }
 
-if (wantsOffline(window.location.search)) {
+function startOffline(): void {
+  document.getElementById('join-screen')?.remove();
   document.body.classList.add('playing');
   const session = new OfflineSession();
   const game = new Game(session);
   game.start();
-  if (import.meta.env.DEV) {
-    // Exposed for poking at the running game from the dev console.
-    (window as unknown as { __lw: { game: Game; session: OfflineSession } }).__lw = {
-      game,
-      session,
-    };
-  }
-} else {
-  // Networked play arrives with change 04; until then the offline harness is the only mode.
-  showNotice('Online play is not available yet. Open this page with ?offline to play locally.');
+  exposeForDebugging({ game, session });
 }
+
+function startOnline(): void {
+  const join = bindJoinScreen();
+  const disconnected = bindDisconnectScreen();
+  join.setName(loadName());
+  join.show();
+
+  let joining = false;
+  join.onPlay((name) => {
+    if (joining) return;
+    joining = true;
+    join.setError('');
+    join.setBusy(true);
+    const trimmed = name.trim();
+    saveName(trimmed);
+
+    const session = new NetSession({
+      url: defaultServerUrl(window.location),
+      name: trimmed,
+      onStatus: (status, reason) => {
+        // Before the first snapshot the join screen reports problems; after, the overlay does.
+        if (document.body.classList.contains('playing'))
+          disconnected.update(status, reason ?? null);
+      },
+    });
+    disconnected.onReconnect(() => session.reconnect());
+
+    session.ready.then(
+      () => {
+        join.hide();
+        document.body.classList.add('playing');
+        const game = new Game(session);
+        game.start();
+        exposeForDebugging({ game, session });
+      },
+      () => {
+        joining = false;
+        join.setBusy(false);
+        join.setError(disconnectMessage(session.reason ?? 'closed'));
+      },
+    );
+  });
+}
+
+if (wantsOffline(window.location.search)) startOffline();
+else startOnline();

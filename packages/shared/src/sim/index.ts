@@ -5,3 +5,4 @@ export { Rng } from './rng.ts';
 export { serializeWorld } from './serialize.ts';
 export type * from './types.ts';
 export { World } from './world.ts';
+export { fuelCapacityOf } from './train.ts';

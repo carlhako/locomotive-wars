@@ -53,6 +53,35 @@ describe('trains', () => {
     expect(world.removeTrain(a.id)).toBe(false);
   });
 
+  it('reports a removed train as trainLeft, not as a kill', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({ x: 1000, y: 1000, carriages: ['mg', 'shield', 'armor', 'speed'] });
+    world.addTrain({ x: 4000, y: 4000 });
+    const events = [...world.step()];
+    expect(world.removeTrain(a.id)).toBe(true);
+    events.push(...world.step());
+    expect(ofType(events, 'trainLeft')).toEqual([
+      { type: 'trainLeft', trainId: a.id, x: a.x, y: a.y },
+    ]);
+    expect(ofType(events, 'trainDestroyed')).toHaveLength(0);
+    expect(world.state.drops).toHaveLength(0);
+  });
+
+  it('drops half the carriages as pickups when asked, with no kill event', () => {
+    const world = emptyWorld();
+    // Locomotive plus four carriages: five in all, so two drop.
+    const a = world.addTrain({ x: 1000, y: 1000, carriages: ['mg', 'shield', 'armor', 'speed'] });
+    world.step();
+    world.removeTrain(a.id, { drop: true });
+    const events = world.step();
+    expect(world.state.drops).toHaveLength(2);
+    expect(ofType(events, 'trainLeft')).toHaveLength(1);
+    expect(ofType(events, 'trainDestroyed')).toHaveLength(0);
+    for (const d of world.state.drops) {
+      expect(Math.abs(d.x - 1000)).toBeLessThan(120);
+    }
+  });
+
   it('spawns new trains away from existing ones when it can', () => {
     const world = emptyWorld();
     world.addTrain({ x: 3000, y: 3000 });

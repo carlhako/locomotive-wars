@@ -49,7 +49,37 @@
       <div id="banner"></div>
     </div>
     <button id="mute-btn">🔊 Sound: On</button>
-    <div id="notice"></div>
+    <div id="join-screen" class="overlay">
+      <h1>LOCOMOTIVE WARS</h1>
+      <div class="subtitle">Slither-style train combat</div>
+      <p class="blurb">
+        Collect trailers to grow your train. Each trailer is a weapon, defense, or support. Fight
+        drones, hunt other trains, and defeat the OVERLORD bosses. Survive the wasteland.
+      </p>
+      <div class="controls">
+        <p><kbd>A</kbd><kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> — Turn</p>
+        <p><kbd>Space</kbd> — Boost (drains fuel)</p>
+        <p><kbd>S</kbd> or <kbd>↓</kbd> — Brake</p>
+        <p><kbd>Mouse</kbd> — Aim weapons</p>
+      </div>
+      <form id="join-form" autocomplete="off">
+        <label for="player-name">Your name</label>
+        <input
+          id="player-name"
+          type="text"
+          maxlength="16"
+          spellcheck="false"
+          placeholder="Player"
+        />
+        <button id="play-btn" type="submit">Play</button>
+      </form>
+      <div id="join-error" role="alert"></div>
+    </div>
+    <div id="disconnect-screen" class="overlay death" style="display: none">
+      <h1>DISCONNECTED</h1>
+      <p id="disconnect-reason"></p>
+      <button id="reconnect-btn" type="button">Reconnect</button>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-import { viewFromWorld, World } from '@lw/shared';
+import { BOT_NAMES, viewFromWorld, World } from '@lw/shared';
 import type { SimEvent, TrainInput, WorldOptions, WorldView } from '@lw/shared';
 import { interpolateView } from './interpolate.ts';
 import type { GameSource } from './source.ts';
@@ -9,51 +9,6 @@ export const OFFLINE_BOTS = 6;
 export const RESTART_DELAY = 1.5;
 /** Longest real time a single frame may add to the accumulator (a tab that was backgrounded). */
 const MAX_FRAME = 0.25;
-
-/** Bot names from the reference (line 220). */
-const BOT_NAMES = [
-  'IronWolf',
-  'SteelHawk',
-  'CrimsonRail',
-  'Thunder-7',
-  'Magnetar',
-  'Vortex',
-  'Pandora',
-  'Brimstone',
-  'NightTrain',
-  'GhostProtocol',
-  'BrassBeast',
-  'Centurion',
-  'DoomEngine',
-  'Eclipse',
-  'Frostbite',
-  'Gunslinger',
-  'Helios',
-  'Inferno',
-  'Juggernaut',
-  'Kraken',
-  'Lightning',
-  'Moonshine',
-  'Nemesis',
-  'Onyx',
-  'Phantom',
-  'Quasar',
-  'Razorback',
-  'Stormbringer',
-  'Titan',
-  'Umbra',
-  'Vector',
-  'Wraith',
-  'Xenon',
-  'Yankee',
-  'Zenith',
-  'Apex',
-  'Bolt',
-  'Cyclone',
-  'Drake',
-  'Eagle',
-  'Falcon',
-];
 
 export interface OfflineOptions {
   /** World seed. Defaults to the current time so every session differs. */

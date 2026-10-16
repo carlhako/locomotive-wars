@@ -195,6 +195,13 @@ export type SimEvent =
       x: number;
       y: number;
     }
+  | {
+      /** A train was removed from the world without being destroyed (its owner left). */
+      type: 'trainLeft';
+      trainId: number;
+      x: number;
+      y: number;
+    }
   | { type: 'bridgeOn'; trainId: number; x: number; y: number }
   | { type: 'bridgeOff'; trainId: number; x: number; y: number }
   | { type: 'bossSpawn'; enemyId: number; name: string; x: number; y: number }

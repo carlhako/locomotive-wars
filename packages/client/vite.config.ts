@@ -1,7 +1,7 @@
 import { defaultClientConditions, defineConfig } from 'vite';
 
-// Dev server port for the game server; replaced by real server config in change 06.
-const SERVER_PORT = 3000;
+// Where `npm run dev` finds the game server: the server's default port (change 06 adds config).
+const SERVER_PORT = 8080;
 
 export default defineConfig({
   resolve: {

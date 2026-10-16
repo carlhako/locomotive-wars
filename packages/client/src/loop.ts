@@ -137,6 +137,9 @@ export class Game {
       if (local) followCamera(this.camera, local.x, local.y, size, dt, true);
     }
     this.names.observe(view);
+    if (this.source.knownTrains) {
+      for (const t of this.source.knownTrains()) this.names.remember(t.id, t.name, t.color);
+    }
     applyEvents(events, { view, names: this.names, size }, this.fx);
 
     if (local) followCamera(this.camera, local.x, local.y, size, dt);

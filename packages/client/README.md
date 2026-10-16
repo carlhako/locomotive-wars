@@ -13,9 +13,13 @@ From the repository root:
 npm run dev -w @lw/client
 ```
 
-Then open <http://localhost:5173/?offline>. Offline mode runs the shared simulation inside the
-page with six bots, so no server is needed. Without `?offline` the page shows a notice, because
-networked play arrives with change 04.
+To play online, run the server too (`npm run dev` from the repository root starts both), open
+<http://localhost:5173/>, enter a name, and press Play. The name is remembered in `localStorage`
+under `lw.name`. If the connection drops, or no snapshot arrives for 5 seconds, a "Disconnected"
+overlay offers a Reconnect button, which joins afresh.
+
+For development without a server, open <http://localhost:5173/?offline>. Offline mode runs the
+shared simulation inside the page with six bots.
 
 ## Controls
 
@@ -30,7 +34,8 @@ These keys never scroll the page. The mute button at the bottom of the screen si
 audio; the choice is remembered in `localStorage` under `lw.muted`. If your browser blocks
 storage, sound simply starts unmuted on every load.
 
-Playing offline, a destroyed train restarts the session after a short pause. There is no slow
+Playing offline, a destroyed train restarts the session after a short pause. Online, a destroyed
+train stays dead until you reload (respawn arrives with change 05). There is no slow
 motion: other trains keep moving at normal speed while your death effects play.
 
 ## How it fits together
@@ -43,15 +48,17 @@ GameSource ──advance(dt, input)──▶ events ──▶ eventFx ──▶ 
 
 The one rule: everything is drawn from a `WorldView` (`@lw/shared`, `view.ts`) plus the
 `SimEvent`s of the tick. A `GameSource` produces both. `OfflineSession` does it by stepping a
-local `World`; the online client (change 04) will produce the same from network snapshots, and
-all presentation code is shared.
+local `World`; `NetSession` produces the same from network snapshots, and all presentation code is
+shared.
 
 ```
 src/
-  main.ts          boot: ?offline starts an OfflineSession
+  main.ts          boot: ?offline starts an OfflineSession, otherwise the join screen and a NetSession
   loop.ts          Game: per-frame input -> source -> effects -> render
   source.ts        GameSource interface (the seam between world and presentation)
   offline.ts       local World + bots, 30 Hz accumulator, restart on destruction
+  net/             the online GameSource (see below)
+  ui/              join screen (name field, storage) and disconnect overlay
   interpolate.ts   blends two views a tick apart (wrap-aware)
   input.ts         keyboard/mouse -> TrainInput
   render/          canvas (camera, wrapped projection), stars, train, bridge, enemies,
@@ -60,6 +67,22 @@ src/
   fx/              particles, damageNumbers, shake, hitFlash, eventFx (SimEvent -> effects)
   audio/           sound (procedural WebAudio, mute persistence)
 ```
+
+### Networked play (`src/net/`)
+
+| File            | Role                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| `connection.ts` | `NetSession`: join handshake, input sending, pings, disconnect detection, builds the view |
+| `transport.ts`  | The socket behind a small `Transport` interface (a WebSocket today)                       |
+| `clock.ts`      | Server-time estimate from ping/pong (median of the five lowest-RTT samples)               |
+| `buffer.ts`     | Recent snapshots; samples a `WorldView` at a render time, wrap-aware                      |
+| `view.ts`       | Snapshot message to `WorldView`; derives carriage angles from positions                   |
+| `localTrain.ts` | The player's own train: newest state run forward, corrections blended over 100 ms         |
+
+Other entities are drawn 133 ms behind the estimated server time and interpolated between
+snapshots. The player's own train is drawn from the newest snapshot instead, extrapolated with the
+server's turn and speed rules and the current controls, so steering responds at once. The message
+formats and rates are in [`@lw/shared`'s protocol notes](../shared/src/protocol/README.md).
 
 ### Seam rendering
 

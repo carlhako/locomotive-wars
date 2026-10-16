@@ -8,9 +8,15 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "soak": "tsx --conditions=source src/soak.ts"
   },
   "dependencies": {
-    "@lw/shared": "*"
+    "@lw/shared": "*",
+    "sirv": "^3.0.2",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
   }
 }

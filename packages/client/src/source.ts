@@ -20,4 +20,9 @@ export interface GameSource {
   advance(dt: number, input: TrainInput): SimEvent[];
   /** The view to draw right now (interpolated between simulation steps). */
   view(): WorldView;
+  /**
+   * Names and colours of trains the source knows about even when they are not in the view, so
+   * events that mention a distant train (a kill) can still name it.
+   */
+  knownTrains?(): Iterable<{ id: number; name: string; color: string }>;
 }

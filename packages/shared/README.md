@@ -23,22 +23,22 @@ const events = world.step(); // advances exactly one tick, returns what happened
 
 ## World API
 
-| API                              | Purpose                                                                                                            |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `new World(options?)`            | Creates a world; places the initial trailers and enemies from the seed.                                            |
-| `addTrain(opts?)` → `TrainState` | Adds a train (locomotive plus `carriages`). Position is random and clear of other trains unless `x`/`y` are given. |
-| `removeTrain(id)`                | Removes a train. Returns whether it existed.                                                                       |
-| `setInput(id, input)`            | Sets any of `turn`, `boost`, `brake`, `aim` on a train. Unset fields and later ticks keep the last value.          |
-| `step()` → `SimEvent[]`          | Advances one fixed tick and returns that tick's events in order.                                                   |
-| `addCarriage(trainId, kind)`     | Gives a train a carriage as if picked up. `false` at the carriage limit.                                           |
-| `spawnTrailer(x?, y?, kind?)`    | Places a trailer (random position and type when omitted).                                                          |
-| `spawnEnemy(kind?, x?, y?)`      | Places a `drone`, `hunter`, or `sentry`.                                                                           |
-| `spawnBoss()`                    | Spawns the boss now, or returns the living one.                                                                    |
-| `getTrain(id)`, `getEnemy(id)`   | Lookups by id.                                                                                                     |
-| `state`                          | All mutable state as plain data (`trains`, `enemies`, `projectiles`, `trailers`, `drops`, timers, `tick`, `time`). |
-| `rng`, `dt`, `rules`, `options`  | The seeded random source, seconds per tick, shared geometry, and resolved options.                                 |
-| `serializeWorld(world)`          | Stable string of the whole state including the random generator, for determinism checks and snapshots.             |
-| `botInput(world, trainId, rng)`  | The bot controller as a function returning a `TrainInput`.                                                         |
+| API                              | Purpose                                                                                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `new World(options?)`            | Creates a world; places the initial trailers and enemies from the seed.                                                                 |
+| `addTrain(opts?)` → `TrainState` | Adds a train (locomotive plus `carriages`). Position is random and clear of other trains unless `x`/`y` are given.                      |
+| `removeTrain(id, {drop?})`       | Removes a train; returns whether it existed. A living train's removal emits `trainLeft`; `drop` scatters half its carriages as pickups. |
+| `setInput(id, input)`            | Sets any of `turn`, `boost`, `brake`, `aim` on a train. Unset fields and later ticks keep the last value.                               |
+| `step()` → `SimEvent[]`          | Advances one fixed tick and returns that tick's events in order.                                                                        |
+| `addCarriage(trainId, kind)`     | Gives a train a carriage as if picked up. `false` at the carriage limit.                                                                |
+| `spawnTrailer(x?, y?, kind?)`    | Places a trailer (random position and type when omitted).                                                                               |
+| `spawnEnemy(kind?, x?, y?)`      | Places a `drone`, `hunter`, or `sentry`.                                                                                                |
+| `spawnBoss()`                    | Spawns the boss now, or returns the living one.                                                                                         |
+| `getTrain(id)`, `getEnemy(id)`   | Lookups by id.                                                                                                                          |
+| `state`                          | All mutable state as plain data (`trains`, `enemies`, `projectiles`, `trailers`, `drops`, timers, `tick`, `time`).                      |
+| `rng`, `dt`, `rules`, `options`  | The seeded random source, seconds per tick, shared geometry, and resolved options.                                                      |
+| `serializeWorld(world)`          | Stable string of the whole state including the random generator, for determinism checks and snapshots.                                  |
+| `botInput(world, trainId, rng)`  | The bot controller as a function returning a `TrainInput`.                                                                              |
 
 `WorldOptions`: `seed` (1), `tickRate` (30), `mapSize` (6000), `maxCarriages` (150, locomotive
 included), `carriageSpacing` (18), `maxTrailers` (60), `maxEnemies` (22), `initialTrailers` (50),
@@ -52,6 +52,13 @@ Trains, enemies, projectiles, and pickups share one id space, so an id identifie
 A train with `controller: 'bot'` has `botInput` evaluated for it at the start of every `step()`;
 `controller: 'human'` trains only change when `setInput` is called. `setInput` ignores non-finite
 numbers and clamps `turn`, so network input can be passed straight in.
+
+## Networking
+
+Also exported for the server and client: the wire protocol (`PROTOCOL_VERSION`, message types,
+`decodeClientMessage` / `decodeServerMessage`, rates and radii), documented in
+[`src/protocol/README.md`](src/protocol/README.md); `sanitizeName` for player display names; and
+`viewFromWorld` / `WorldView`, the model the client renders from.
 
 ## Tick model
 
@@ -78,7 +85,9 @@ steering decision uses the shortest wrapped route.
 
 ## Events
 
-`step()` returns events in the order they happened. All carry positions (`x`, `y`) in world units.
+`step()` returns events in the order they happened. Events raised between steps (a train removed
+with `removeTrain`) come first in the next step's list. All carry positions (`x`, `y`) in world
+units.
 
 | `type`                 | Fields                                                           | When                                                            |
 | ---------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------- |
@@ -86,6 +95,7 @@ steering decision uses the shortest wrapped route.
 | `hit`                  | `victimKind`, `victimId`, `attackerKind`, `attackerId`, `amount` | Damage lands (shot, splash, or ram). `amount` is after shields. |
 | `enemyDestroyed`       | `enemyId`, `enemyKind`, `sourceId`                               | A non-boss enemy dies; `sourceId` is the crediting train.       |
 | `trainDestroyed`       | `victimId`, `sourceKind`, `sourceId`                             | A train reaches zero hull and drops half its carriages.         |
+| `trainLeft`            | `trainId`                                                        | A living train is removed by its owner (disconnect); no kill.   |
 | `pickup`               | `trainId`, `pickupId`, `carriage`, `source`, `added`             | A trailer or drop is collected; `added` is false at the cap.    |
 | `bridgeOn`/`bridgeOff` | `trainId`                                                        | The head enters or leaves range of its own trail.               |
 | `bossSpawn`            | `enemyId`, `name`                                                | The boss appears.                                               |

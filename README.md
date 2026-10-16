@@ -20,19 +20,21 @@ npm install
 npm run dev
 ```
 
-`npm run dev` starts the game server and the Vite client together. Open http://localhost:5173.
-The client dev server proxies the `/ws` path to the game server on port 3000.
+`npm run dev` starts the game server (port 8080) and the Vite client together. Open
+http://localhost:5173, enter a name, and press Play. The client dev server proxies the `/ws` path to
+the game server. To try the client without a server, open http://localhost:5173/?offline.
 
 ## Scripts
 
-| Script              | What it does                                         |
-| ------------------- | ---------------------------------------------------- |
-| `npm run dev`       | Server (`tsx watch`) and client (Vite) together      |
-| `npm run build`     | Build `shared`, then `server` (`tsc`), then `client` |
-| `npm test`          | Run every package's Vitest tests                     |
-| `npm run lint`      | ESLint and a Prettier format check                   |
-| `npm run typecheck` | `tsc --noEmit` in every package                      |
-| `npm run format`    | Rewrite files with Prettier                          |
+| Script                       | What it does                                         |
+| ---------------------------- | ---------------------------------------------------- |
+| `npm run dev`                | Server (`tsx watch`) and client (Vite) together      |
+| `npm run build`              | Build `shared`, then `server` (`tsc`), then `client` |
+| `npm run soak -w @lw/server` | 60 s load test: 16 clients, tick rate and bandwidth  |
+| `npm test`                   | Run every package's Vitest tests                     |
+| `npm run lint`               | ESLint and a Prettier format check                   |
+| `npm run typecheck`          | `tsc --noEmit` in every package                      |
+| `npm run format`             | Rewrite files with Prettier                          |
 
 ## Layout
 
