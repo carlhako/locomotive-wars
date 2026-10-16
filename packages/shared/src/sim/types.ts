@@ -16,6 +16,9 @@ export type Controller = 'human' | 'bot';
 /** Who owns a projectile, took damage, or dealt it. Trains and enemies share one id space. */
 export type EntityKind = 'train' | 'enemy';
 
+/** What destroyed a train: another train's body or weapon, an enemy, or the boss. */
+export type KillCause = 'ram' | 'weapon' | 'enemy' | 'boss';
+
 export interface DamageSource {
   kind: EntityKind;
   id: number;
@@ -100,6 +103,12 @@ export interface TrainState {
   damageReduction: number;
   path: PathSample[];
   ai: BotState;
+  /** Seconds of spawn protection left; the train cannot be harmed, ram, or fire while above 0. */
+  protectedFor: number;
+  /** Increments each time the train respawns, so clients can tell a new train from a moved one. */
+  spawnSeq: number;
+  /** Trains this train has destroyed since it last spawned. For the kill feed, not score. */
+  kills: number;
 }
 
 export interface EnemyState {
@@ -179,8 +188,11 @@ export type SimEvent =
   | {
       type: 'trainDestroyed';
       victimId: number;
-      sourceKind: EntityKind | null;
-      sourceId: number | null;
+      cause: KillCause;
+      /** Train that earned the kill: the projectile's owner or the body rammed. */
+      killerTrainId?: number;
+      /** Enemy (or boss) that landed the killing blow. */
+      killerEnemyId?: number;
       x: number;
       y: number;
     }
@@ -247,8 +259,10 @@ export interface AddTrainOptions {
   y?: number;
   /** Initial heading in radians. Random if omitted. */
   angle?: number;
-  /** Carriages to add behind the locomotive. */
+  /** Carriages to add behind the locomotive. Default: one MG, the starter train. */
   carriages?: readonly PickupKind[];
+  /** Seconds of spawn protection. Default `SPAWN_PROTECTION`. */
+  protectedFor?: number;
 }
 
 /** Everything that changes as the world runs, in one serializable object. */

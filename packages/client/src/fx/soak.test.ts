@@ -11,7 +11,7 @@ import { KillFeed, KILL_FEED_MAX } from '../hud/killfeed.ts';
 
 describe('effects soak', () => {
   it('keeps particle and number counts bounded over two minutes of busy play', () => {
-    const session = new OfflineSession({ seed: 2024, bots: 10, restartDelay: 0.5 });
+    const session = new OfflineSession({ seed: 2024, bots: 10 });
     const particles = new ParticleSystem(MAX_PARTICLES, session.mapSize);
     const numbers = new DamageNumbers();
     const killFeed = new KillFeed();

@@ -36,7 +36,7 @@ describe('World construction', () => {
     expect(typeof (globalThis as { window?: unknown }).window).toBe('undefined');
     expect(typeof (globalThis as { document?: unknown }).document).toBe('undefined');
     const world = new World({ seed: 3 });
-    world.addTrain({ controller: 'bot' });
+    world.addTrain({ protectedFor: 0, carriages: [], controller: 'bot' });
     expect(() => run(world, 60)).not.toThrow();
   });
 });
@@ -44,8 +44,8 @@ describe('World construction', () => {
 describe('trains', () => {
   it('assigns unique ids and removes trains', () => {
     const world = emptyWorld();
-    const a = world.addTrain({});
-    const b = world.addTrain({});
+    const a = world.addTrain({ protectedFor: 0, carriages: [] });
+    const b = world.addTrain({ protectedFor: 0, carriages: [] });
     expect(a.id).not.toBe(b.id);
     expect(world.removeTrain(a.id)).toBe(true);
     expect(world.getTrain(a.id)).toBeUndefined();
@@ -55,8 +55,13 @@ describe('trains', () => {
 
   it('reports a removed train as trainLeft, not as a kill', () => {
     const world = emptyWorld();
-    const a = world.addTrain({ x: 1000, y: 1000, carriages: ['mg', 'shield', 'armor', 'speed'] });
-    world.addTrain({ x: 4000, y: 4000 });
+    const a = world.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      carriages: ['mg', 'shield', 'armor', 'speed'],
+    });
+    world.addTrain({ protectedFor: 0, carriages: [], x: 4000, y: 4000 });
     const events = [...world.step()];
     expect(world.removeTrain(a.id)).toBe(true);
     events.push(...world.step());
@@ -70,7 +75,12 @@ describe('trains', () => {
   it('drops half the carriages as pickups when asked, with no kill event', () => {
     const world = emptyWorld();
     // Locomotive plus four carriages: five in all, so two drop.
-    const a = world.addTrain({ x: 1000, y: 1000, carriages: ['mg', 'shield', 'armor', 'speed'] });
+    const a = world.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      carriages: ['mg', 'shield', 'armor', 'speed'],
+    });
     world.step();
     world.removeTrain(a.id, { drop: true });
     const events = world.step();
@@ -84,9 +94,9 @@ describe('trains', () => {
 
   it('spawns new trains away from existing ones when it can', () => {
     const world = emptyWorld();
-    world.addTrain({ x: 3000, y: 3000 });
+    world.addTrain({ protectedFor: 0, carriages: [], x: 3000, y: 3000 });
     for (let i = 0; i < 5; i++) {
-      const t = world.addTrain({});
+      const t = world.addTrain({ protectedFor: 0, carriages: [] });
       expect(Math.hypot(t.x - 3000, t.y - 3000)).toBeGreaterThan(300);
     }
   });
@@ -95,7 +105,14 @@ describe('trains', () => {
 describe('pickups', () => {
   it('lets a bot-controlled train collect a trailer in range', () => {
     const world = emptyWorld();
-    const bot = world.addTrain({ controller: 'bot', x: 1000, y: 1000, angle: 0 });
+    const bot = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      controller: 'bot',
+      x: 1000,
+      y: 1000,
+      angle: 0,
+    });
     world.spawnTrailer(1025, 1000, 'laser');
     const before = bot.carriages.length;
     const events = world.step();
@@ -109,7 +126,7 @@ describe('pickups', () => {
 
   it('ignores trailers out of range', () => {
     const world = emptyWorld();
-    const train = world.addTrain({ x: 1000, y: 1000, angle: 0 });
+    const train = world.addTrain({ protectedFor: 0, carriages: [], x: 1000, y: 1000, angle: 0 });
     world.spawnTrailer(1000, 1200, 'mg');
     run(world, 1);
     expect(world.state.trailers).toHaveLength(1);
@@ -119,8 +136,14 @@ describe('pickups', () => {
   it('extends pickup range with magnet carriages', () => {
     const plain = emptyWorld();
     const magnet = emptyWorld();
-    plain.addTrain({ x: 1000, y: 1000, angle: Math.PI / 2 });
-    magnet.addTrain({ x: 1000, y: 1000, angle: Math.PI / 2, carriages: ['magnet'] });
+    plain.addTrain({ protectedFor: 0, carriages: [], x: 1000, y: 1000, angle: Math.PI / 2 });
+    magnet.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      angle: Math.PI / 2,
+      carriages: ['magnet'],
+    });
     // After one tick the head is 6 units further along y; the trailer is ~42 units away.
     for (const w of [plain, magnet]) w.spawnTrailer(1000, 1048, 'mg');
     run(plain, 1);
@@ -131,7 +154,7 @@ describe('pickups', () => {
 
   it('collects across the map seam', () => {
     const world = emptyWorld();
-    const train = world.addTrain({ x: 5990, y: 1000, angle: 0 });
+    const train = world.addTrain({ protectedFor: 0, carriages: [], x: 5990, y: 1000, angle: 0 });
     world.spawnTrailer(10, 1000, 'mg');
     run(world, 1);
     expect(world.state.trailers).toHaveLength(0);
@@ -140,8 +163,8 @@ describe('pickups', () => {
 
   it('only gives a trailer to one train', () => {
     const world = emptyWorld();
-    const a = world.addTrain({ x: 1000, y: 1000, angle: 0 });
-    const b = world.addTrain({ x: 1000, y: 1000, angle: 0 });
+    const a = world.addTrain({ protectedFor: 0, carriages: [], x: 1000, y: 1000, angle: 0 });
+    const b = world.addTrain({ protectedFor: 0, carriages: [], x: 1000, y: 1000, angle: 0 });
     world.spawnTrailer(1010, 1000, 'mg');
     run(world, 1);
     expect(a.carriages.length + b.carriages.length).toBe(3);
@@ -158,7 +181,7 @@ describe('pickups', () => {
 
   it('lets trains collect drops', () => {
     const world = emptyWorld();
-    const train = world.addTrain({ x: 1000, y: 1000, angle: 0 });
+    const train = world.addTrain({ protectedFor: 0, carriages: [], x: 1000, y: 1000, angle: 0 });
     world.spawnDrop(1020, 1000, 'shield');
     const events = run(world, 1);
     expect(world.state.drops).toHaveLength(0);
@@ -191,7 +214,7 @@ describe('population', () => {
 
   it('uses the last input on every tick without new input', () => {
     const world = emptyWorld();
-    const train = world.addTrain({ x: 100, y: 100, angle: 0 });
+    const train = world.addTrain({ protectedFor: 0, carriages: [], x: 100, y: 100, angle: 0 });
     world.setInput(train.id, { turn: -1 });
     run(world, 15);
     const mid = train.angle;

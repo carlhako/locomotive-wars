@@ -34,9 +34,10 @@ These keys never scroll the page. The mute button at the bottom of the screen si
 audio; the choice is remembered in `localStorage` under `lw.muted`. If your browser blocks
 storage, sound simply starts unmuted on every load.
 
-Playing offline, a destroyed train restarts the session after a short pause. Online, a destroyed
-train stays dead until you reload (respawn arrives with change 05). There is no slow
-motion: other trains keep moving at normal speed while your death effects play.
+A destroyed train respawns on the next tick, offline and online, as a fresh locomotive-plus-MG
+starter at a safe spot, protected for 3.5 s (drawn with a shield ring). A "Destroyed by X" notice
+shows for a couple of seconds and the camera jumps to the new train; there is no game-over screen.
+There is no slow motion: other trains keep moving at normal speed while your death effects play.
 
 ## How it fits together
 
@@ -56,7 +57,7 @@ src/
   main.ts          boot: ?offline starts an OfflineSession, otherwise the join screen and a NetSession
   loop.ts          Game: per-frame input -> source -> effects -> render
   source.ts        GameSource interface (the seam between world and presentation)
-  offline.ts       local World + bots, 30 Hz accumulator, restart on destruction
+  offline.ts       local World + bots, 30 Hz accumulator, respawn on destruction
   net/             the online GameSource (see below)
   ui/              join screen (name field, storage) and disconnect overlay
   interpolate.ts   blends two views a tick apart (wrap-aware)

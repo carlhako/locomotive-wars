@@ -6,7 +6,13 @@ import { World } from './world.ts';
 describe('event stream', () => {
   it('reports a hit with victim, attacker, amount, and position', () => {
     const world = emptyWorld();
-    const victim = world.addTrain({ x: 2000, y: 2000, angle: Math.PI / 2 });
+    const victim = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      x: 2000,
+      y: 2000,
+      angle: Math.PI / 2,
+    });
     world.state.projectiles.push({
       id: 9000,
       kind: 'bullet',
@@ -36,7 +42,13 @@ describe('event stream', () => {
 
   it('orders events within a tick: hit before destroyed', () => {
     const world = emptyWorld();
-    const victim = world.addTrain({ x: 2000, y: 2000, angle: Math.PI / 2 });
+    const victim = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      x: 2000,
+      y: 2000,
+      angle: Math.PI / 2,
+    });
     victim.hull = 1;
     world.state.projectiles.push({
       id: 9000,
@@ -58,7 +70,7 @@ describe('event stream', () => {
 
   it('returns a fresh list each tick', () => {
     const world = emptyWorld();
-    world.addTrain({ x: 1000, y: 1000, angle: 0 });
+    world.addTrain({ protectedFor: 0, carriages: [], x: 1000, y: 1000, angle: 0 });
     world.spawnTrailer(1020, 1000, 'mg');
     const first = world.step();
     const second = world.step();
@@ -70,6 +82,7 @@ describe('event stream', () => {
     const world = new World({ seed: 777 });
     for (let i = 0; i < 8; i++) {
       world.addTrain({
+        protectedFor: 0,
         controller: 'bot',
         carriages: ['mg', 'laser', 'missile', 'shield', 'drones'].slice(0, 2 + (i % 4)) as never,
       });
@@ -85,7 +98,8 @@ describe('event stream', () => {
 
   it('carries positions inside the map on every positional event', () => {
     const world = new World({ seed: 31 });
-    for (let i = 0; i < 6; i++) world.addTrain({ controller: 'bot', carriages: ['mg', 'laser'] });
+    for (let i = 0; i < 6; i++)
+      world.addTrain({ protectedFor: 0, controller: 'bot', carriages: ['mg', 'laser'] });
     for (const e of run(world, 30 * 40)) {
       if ('x' in e) {
         expect(e.x).toBeGreaterThanOrEqual(0);

@@ -21,10 +21,11 @@ const snapshot: SnapshotMsg = {
     f: 50,
     fm: 100,
     fl: 2,
+    sq: 3,
     cs: [90, 200, 72, 200],
     dn: [0.5],
   },
-  tr: [[7, 10, 20, 3.14, 90, 100, 1, 5, 6, 7, 8]],
+  tr: [[7, 10, 20, 3.14, 90, 100, 9, 2, 5, 6, 7, 8]],
   en: [
     [3, 0, 10, 20, 1.2, 20, 20],
     [4, 3, 30, 40, 0, 1200, 1200, 'Dread Maw'],
@@ -33,6 +34,7 @@ const snapshot: SnapshotMsg = {
   dr: [[10, 4, 70, 80, 1.5]],
   pr: [[11, 1, 90, 100, 200, -50]],
   ev: [
+    { type: 'trainDestroyed', victimId: 7, cause: 'ram', killerTrainId: 9, x: 5, y: 6 },
     {
       type: 'hit',
       victimKind: 'train',
@@ -134,6 +136,14 @@ describe('decodeServerMessage', () => {
     ],
     ['a snapshot without events', JSON.stringify({ ...snapshot, ev: undefined })],
     ['a snapshot with a short train row', JSON.stringify({ ...snapshot, tr: [[1, 2, 3]] })],
+    [
+      'a snapshot with a train row missing its spawn counter',
+      JSON.stringify({ ...snapshot, tr: [[7, 10, 20, 3.14, 90, 100, 1]] }),
+    ],
+    [
+      'an own train without a spawn counter',
+      JSON.stringify({ ...snapshot, me: { ...snapshot.me, sq: undefined } }),
+    ],
     [
       'a snapshot with a non-numeric row entry',
       JSON.stringify({ ...snapshot, dr: [[1, 2, 'x', 4, 5]] }),

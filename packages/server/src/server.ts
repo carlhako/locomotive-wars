@@ -24,8 +24,6 @@ import { FixedStepLoop } from './loop.ts';
 import { Session } from './sessions.ts';
 import { buildOverview, buildSnapshot } from './snapshot.ts';
 
-/** Starting carriages for a joining player, as in offline play (reference line 1124). */
-const STARTER_CARRIAGES = ['mg', 'shield'] as const;
 /** A client that has not said hello within this long is dropped. */
 const HELLO_TIMEOUT_MS = 10_000;
 /** Snapshots are skipped for a client whose socket already holds this much unsent data. */
@@ -224,11 +222,7 @@ export class GameServer {
 
   private join(session: Session, rawName: string): void {
     const name = sanitizeName(rawName);
-    const train = this.world.addTrain({
-      name,
-      controller: 'human',
-      carriages: STARTER_CARRIAGES,
-    });
+    const train = this.world.addTrain({ name, controller: 'human' });
     session.trainId = train.id;
     session.name = name;
     this.send(session.ws, {
@@ -254,6 +248,10 @@ export class GameServer {
 
   private tick(): void {
     const world = this.world;
+    // A destroyed player gets a fresh starter train at the start of the next tick.
+    for (const t of world.state.trains) {
+      if (!t.alive && t.controller === 'human') world.respawnTrain(t.id);
+    }
     maintainBots(world, this.botCount);
     for (const s of this.sessions) {
       if (s.trainId === null || !s.pending) continue;

@@ -124,9 +124,14 @@ export class LocalTrain {
     now: number,
     input: TrainInput,
   ): void {
-    const before = this.base ? this.sample(serverNow, now, input) : null;
+    const respawned = this.base !== null && this.base.me.sq !== me.sq;
+    const before = this.base && !respawned ? this.sample(serverNow, now, input) : null;
     this.base = { st, me, speedMult: 1 + SPEED_BONUS * speedCarriages };
-    if (!before) return;
+    if (!before) {
+      // A new train has nothing to blend from: show it where the server put it.
+      this.corrX = this.corrY = this.corrA = 0;
+      return;
+    }
     const after = this.predict(serverNow, input);
     const dx = wrapDelta(before.x - after.x, this.size);
     const dy = wrapDelta(before.y - after.y, this.size);

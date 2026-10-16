@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TrainInput } from '@lw/shared';
-import { OFFLINE_BOTS, OfflineSession, RESTART_DELAY } from './offline.ts';
+import { OFFLINE_BOTS, OfflineSession } from './offline.ts';
 
 const IDLE: TrainInput = { turn: 0, boost: false, brake: false, aim: 0 };
 
@@ -14,9 +14,10 @@ describe('OfflineSession', () => {
     expect(view.trains.filter((t) => t.controller === 'bot')).toHaveLength(OFFLINE_BOTS);
     expect(view.localId).toBe(session.playerId);
     expect(view.minimap.filter((m) => m.isLocal)).toHaveLength(1);
-    // The player starts with a weapon and a shield behind the locomotive.
+    // The player starts as the standard starter train: locomotive and MG, protected.
     const me = view.trains.find((t) => t.id === view.localId)!;
-    expect(me.carriages.map((c) => c.kind)).toEqual(['locomotive', 'mg', 'shield']);
+    expect(me.carriages.map((c) => c.kind)).toEqual(['locomotive', 'mg']);
+    expect(me.protected).toBe(true);
   });
 
   it('steps the simulation at 30 ticks per second regardless of frame size', () => {
@@ -56,13 +57,16 @@ describe('OfflineSession', () => {
     expect(half).toBeCloseTo(full / 2, 1);
   });
 
-  it('restarts with a fresh world after the local train is destroyed', () => {
-    const session = new OfflineSession({ seed: 7, restartDelay: 0.5 });
+  it('respawns the local train in place after it is destroyed, without restarting', () => {
+    const session = new OfflineSession({ seed: 7 });
     const oldId = session.playerId;
     const oldGeneration = session.generation;
     const world = session.currentWorld;
     const me = world.getTrain(oldId)!;
-    // A heavy enemy shot at the head ends the run on the next tick.
+    me.protectedFor = 0;
+    for (const kind of ['armor', 'speed', 'shield'] as const) world.addCarriage(oldId, kind);
+    const [oldX, oldY] = [me.x, me.y];
+    // A heavy enemy shot at the head ends the train on the next tick.
     world.state.projectiles.push({
       id: 900001,
       kind: 'bullet',
@@ -79,28 +83,44 @@ describe('OfflineSession', () => {
 
     const events = session.advance(world.dt, IDLE);
     expect(events.some((e) => e.type === 'trainDestroyed' && e.victimId === oldId)).toBe(true);
+    expect(session.view().trains.find((t) => t.id === oldId)?.alive).toBe(false);
+
+    // The very next tick brings the player back: same world, same id, a fresh starter train.
+    session.advance(world.dt, IDLE);
+    expect(session.currentWorld).toBe(world);
+    expect(session.generation).toBe(oldGeneration);
     expect(session.playerId).toBe(oldId);
-
-    // Time keeps running at the normal rate while the death plays out: no slow motion.
-    const tickBefore = world.state.tick;
-    session.advance(0.25, IDLE);
-    const ticks = world.state.tick - tickBefore;
-    expect(ticks).toBeGreaterThanOrEqual(7);
-    expect(ticks).toBeLessThanOrEqual(8);
-
-    // A single frame is capped at 0.25 s of simulation, so step the remainder in two.
-    session.advance(0.25, IDLE);
-    session.advance(0.25, IDLE);
-    // Ids are assigned in creation order, so the new player may reuse the old id; the
-    // generation is what tells consumers the world was replaced.
-    expect(session.generation).toBe(oldGeneration + 1);
-    expect(session.currentWorld).not.toBe(world);
-    const view = session.view();
-    expect(view.trains.find((t) => t.id === session.playerId)?.alive).toBe(true);
-    expect(view.trains).toHaveLength(1 + OFFLINE_BOTS);
+    const back = session.view().trains.find((t) => t.id === oldId)!;
+    expect(back.alive).toBe(true);
+    expect(back.carriages.map((c) => c.kind)).toEqual(['locomotive', 'mg']);
+    expect(back.protected).toBe(true);
+    expect(back.spawnSeq).toBe(1);
+    expect(Math.hypot(back.x - oldX, back.y - oldY)).toBeGreaterThan(0);
+    expect(back.hp).toBe(back.maxHp);
   });
 
-  it('keeps the default restart delay short', () => {
-    expect(RESTART_DELAY).toBeLessThan(3);
+  it('draws a respawned train at its new position, not sliding in from the old one', () => {
+    const session = new OfflineSession({ seed: 7 });
+    const world = session.currentWorld;
+    const me = world.getTrain(session.playerId)!;
+    me.alive = false;
+    session.advance(world.dt * 0.5, IDLE);
+    session.advance(world.dt * 0.5, IDLE);
+    const spawn = world.getTrain(session.playerId)!;
+    expect(spawn.spawnSeq).toBe(1);
+    // Part-way through the next tick the view must still be at the spawn point's neighbourhood.
+    session.advance(world.dt * 0.5, IDLE);
+    const drawn = session.view().trains.find((t) => t.id === session.playerId)!;
+    expect(Math.hypot(drawn.x - spawn.x, drawn.y - spawn.y)).toBeLessThan(20);
+  });
+
+  it('respawns destroyed bots as starter trains too', () => {
+    const session = new OfflineSession({ seed: 7 });
+    const world = session.currentWorld;
+    const bot = world.state.trains.find((t) => t.controller === 'bot')!;
+    bot.alive = false;
+    session.advance(world.dt * 1.5, IDLE);
+    expect(bot.alive).toBe(true);
+    expect(bot.carriages.map((c) => c.kind)).toEqual(['locomotive', 'mg']);
   });
 });

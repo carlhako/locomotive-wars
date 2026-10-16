@@ -1,6 +1,8 @@
 import {
   BOSS_DROP_JITTER,
   BOSS_DROPS,
+  BODY_COLLISION_MIN_INDEX,
+  BODY_COLLISION_RADIUS,
   BOSS_HIT_RADIUS,
   DEATH_DROP_FRACTION,
   DEATH_DROP_JITTER,
@@ -30,8 +32,10 @@ import type {
   DamageSource,
   EnemyState,
   EntityKind,
+  KillCause,
   Projectile,
   ProjectileKind,
+  SimEvent,
   TrainState,
   WeaponKind,
 } from './types.ts';
@@ -82,9 +86,16 @@ export function spawnProjectile(
 
 // ===== Damage and destruction =====
 
+/** How a kill by this damage source is classed: a train's shot, an enemy's, or the boss's. */
+function causeOf(world: World, source: DamageSource | null): KillCause {
+  if (source?.kind === 'train') return 'weapon';
+  return world.getEnemy(source?.id ?? -1)?.kind === 'boss' ? 'boss' : 'enemy';
+}
+
 /**
  * Applies damage to a train after shield reduction and emits a hit event. The train is
- * destroyed at zero hull. `at` is where the hit landed (the head by default).
+ * destroyed at zero hull, crediting `source`. A protected train takes nothing (the caller still
+ * consumes the projectile). `at` is where the hit landed (the head by default).
  */
 export function damageTrain(
   world: World,
@@ -93,7 +104,7 @@ export function damageTrain(
   source: DamageSource | null,
   at?: { x: number; y: number },
 ): void {
-  if (!train.alive) return;
+  if (!train.alive || train.protectedFor > 0) return;
   const dealt = amount * (1 - damageReductionOf(train));
   train.hull -= dealt;
   world.emit({
@@ -106,7 +117,7 @@ export function damageTrain(
     x: at?.x ?? train.x,
     y: at?.y ?? train.y,
   });
-  if (train.hull <= 0) destroyTrain(world, train, source);
+  if (train.hull <= 0) destroyTrain(world, train, causeOf(world, source), source);
 }
 
 /** Turns half of a train's carriages (rounded down) into random pickups scattered around them. */
@@ -125,9 +136,15 @@ export function dropCarriages(world: World, train: TrainState): void {
 /**
  * Marks a train destroyed and turns half its carriages (rounded down) into random pickups
  * scattered around where they were. The train stays in the world, dead, until its owner removes
- * or respawns it.
+ * or respawns it. The event names the cause and the killer, and a train killer's kill count goes
+ * up.
  */
-export function destroyTrain(world: World, train: TrainState, source: DamageSource | null): void {
+export function destroyTrain(
+  world: World,
+  train: TrainState,
+  cause: KillCause,
+  killer: DamageSource | null,
+): void {
   if (!train.alive) return;
   train.alive = false;
   train.hull = 0;
@@ -137,14 +154,21 @@ export function destroyTrain(world: World, train: TrainState, source: DamageSour
     world.emit({ type: 'bridgeOff', trainId: train.id, x: train.x, y: train.y });
   }
   dropCarriages(world, train);
-  world.emit({
+  const event: Extract<SimEvent, { type: 'trainDestroyed' }> = {
     type: 'trainDestroyed',
     victimId: train.id,
-    sourceKind: source?.kind ?? null,
-    sourceId: source?.id ?? null,
+    cause,
     x: train.x,
     y: train.y,
-  });
+  };
+  if (killer?.kind === 'train') {
+    event.killerTrainId = killer.id;
+    const credited = world.getTrain(killer.id);
+    if (credited) credited.kills += 1;
+  } else if (killer?.kind === 'enemy') {
+    event.killerEnemyId = killer.id;
+  }
+  world.emit(event);
 }
 
 /**
@@ -209,14 +233,14 @@ function isWeapon(kind: string): kind is WeaponKind {
   return kind === 'mg' || kind === 'missile' || kind === 'laser';
 }
 
-/** True when any living enemy or other train's head is within `range` of the point. */
+/** True when any living enemy or unprotected other train's head is within `range` of the point. */
 function hostileWithin(world: World, train: TrainState, x: number, y: number, range: number) {
   const size = world.rules.size;
   for (const e of world.state.enemies) {
     if (e.hull > 0 && wrapDist(x, y, e.x, e.y, size) < range) return true;
   }
   for (const t of world.state.trains) {
-    if (t === train || !t.alive) continue;
+    if (t === train || !t.alive || t.protectedFor > 0) continue;
     if (wrapDist(x, y, t.x, t.y, size) < range) return true;
   }
   return false;
@@ -224,10 +248,12 @@ function hostileWithin(world: World, train: TrainState, x: number, y: number, ra
 
 /**
  * Fires each ready weapon carriage along the train's aim angle, provided the aim is inside the
- * carriage's firing arc and a hostile is within range. Cooldowns tick down every tick.
+ * carriage's firing arc and a hostile is within range. Cooldowns tick down every tick. A
+ * protected train holds fire.
  */
 export function fireWeapons(world: World, train: TrainState): void {
   const dt = world.dt;
+  const holding = train.protectedFor > 0;
   const aim = train.input.aim;
   for (let i = 0; i < train.carriages.length; i++) {
     const c = train.carriages[i];
@@ -235,7 +261,7 @@ export function fireWeapons(world: World, train: TrainState): void {
     // Floor at -dt so an idle weapon is ready next tick without banking a burst of shots.
     const timer = Math.max((train.fireTimers[i] ?? 0) - dt, -dt);
     train.fireTimers[i] = timer;
-    if (timer > 0) continue;
+    if (holding || timer > 0) continue;
     if (Math.abs(shortAngle(aim - c.angle)) > WEAPON_ARC) continue;
     if (!hostileWithin(world, train, c.x, c.y, WEAPON_RANGE)) continue;
     const stats = WEAPONS[c.kind];
@@ -262,7 +288,7 @@ export function fireDrones(world: World, train: TrainState): void {
   for (const drone of train.drones) {
     drone.angle += dt * DRONE_ORBIT_SPEED;
     drone.fireTimer = Math.max(drone.fireTimer - dt, -dt);
-    if (drone.fireTimer > 0) continue;
+    if (train.protectedFor > 0 || drone.fireTimer > 0) continue;
     const dx = train.x + Math.cos(drone.angle) * DRONE_ORBIT_RADIUS;
     const dy = train.y + Math.sin(drone.angle) * DRONE_ORBIT_RADIUS;
     let best: EnemyState | null = null;
@@ -377,5 +403,36 @@ export function ramEnemies(world: World): void {
       damageEnemy(world, e, RAM_DAMAGE_TO_ENEMY, { kind: 'train', id: train.id });
       if (!train.alive) break;
     }
+  }
+}
+
+// ===== Train collisions =====
+
+/**
+ * Head-vs-body collisions between every pair of trains. A head within 14 units of another
+ * train's carriage at index 3 or beyond is destroyed, crediting the body's owner. All pairs are
+ * found before any train is destroyed, so a mutual ram destroys both whatever the iteration
+ * order, and a train destroyed here still earns credit for the body that got hit. Protected
+ * trains neither die nor kill.
+ */
+export function collideTrains(world: World): void {
+  const trains = world.state.trains;
+  const size = world.rules.size;
+  const rammed: Array<{ victim: TrainState; owner: TrainState }> = [];
+  for (const victim of trains) {
+    if (!victim.alive || victim.protectedFor > 0) continue;
+    for (const owner of trains) {
+      if (owner === victim || !owner.alive || owner.protectedFor > 0) continue;
+      for (let i = BODY_COLLISION_MIN_INDEX; i < owner.carriages.length; i++) {
+        const c = owner.carriages[i] as TrainState['carriages'][number];
+        if (wrapDist(victim.x, victim.y, c.x, c.y, size) < BODY_COLLISION_RADIUS) {
+          rammed.push({ victim, owner });
+          break;
+        }
+      }
+    }
+  }
+  for (const { victim, owner } of rammed) {
+    destroyTrain(world, victim, 'ram', { kind: 'train', id: owner.id });
   }
 }

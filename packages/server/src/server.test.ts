@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { MAX_INPUT_RATE, MAX_MALFORMED, PROTOCOL_VERSION, SNAPSHOT_RATE } from '@lw/shared';
+import {
+  MAX_INPUT_RATE,
+  MAX_MALFORMED,
+  PROTOCOL_VERSION,
+  SNAPSHOT_RATE,
+  TRAIN_FLAG_DEAD,
+  TRAIN_FLAG_PROTECTED,
+} from '@lw/shared';
 import type { SnapshotMsg } from '@lw/shared';
 import type { GameServer } from './server.ts';
 import { sleep, startServer, TestClient } from './testing.ts';
@@ -234,11 +241,10 @@ describe('snapshots', () => {
     expect(Number.isInteger(snap.me?.x)).toBe(true);
     expect(snap.me?.mh).toBeGreaterThan(0);
     // Static data comes in meta, not in snapshots.
-    expect(c.of('meta')[0]?.trains.find((t) => t.id === c.id)?.kinds).toEqual([
-      'locomotive',
-      'mg',
-      'shield',
-    ]);
+    expect(c.of('meta')[0]?.trains.find((t) => t.id === c.id)?.kinds).toEqual(['locomotive', 'mg']);
+    // A fresh train is protected and on its first spawn.
+    expect((snap.me?.fl ?? 0) & TRAIN_FLAG_PROTECTED).toBe(TRAIN_FLAG_PROTECTED);
+    expect(snap.me?.sq).toBe(0);
     expect(snap.tr.every((row) => row[0] !== c.id)).toBe(true);
   });
 
@@ -279,6 +285,7 @@ describe('snapshots', () => {
     tb.y = 3500;
     await sleep(150);
     // Destroy B, far from A, by pushing a lethal enemy projectile onto it.
+    tb.protectedFor = 0;
     tb.hull = 1;
     server!.world.state.projectiles.push({
       id: 999_999,
@@ -298,7 +305,54 @@ describe('snapshots', () => {
       .of('snap')
       .flatMap((s) => s.ev)
       .find((e) => e.type === 'trainDestroyed');
-    expect(kill).toMatchObject({ victimId: b.id, sourceId: a.id });
+    expect(kill).toMatchObject({ victimId: b.id, cause: 'weapon', killerTrainId: a.id });
+  });
+
+  it('respawns a destroyed player at a new position as a protected starter train', async () => {
+    const port = await start({ botCount: 0 });
+    const a = await join(port, 'A');
+    const b = await join(port, 'B');
+    const ta = trainOf(a.id);
+    const tb = trainOf(b.id);
+    ta.x = 500;
+    ta.y = 500;
+    tb.x = 3500;
+    tb.y = 3500;
+    for (const kind of ['armor', 'speed', 'shield'] as const) server!.world.addCarriage(b.id, kind);
+    ta.protectedFor = 0;
+    tb.protectedFor = 0;
+    await b.waitFor(() => b.of('snap').some((s) => s.me !== null && s.me.cs.length === 10));
+    const before = { x: tb.x, y: tb.y };
+    tb.hull = 1;
+    server!.world.state.projectiles.push({
+      id: 999_998,
+      kind: 'bullet',
+      x: tb.x - 10,
+      y: tb.y,
+      vx: 600,
+      vy: 0,
+      damage: 50,
+      life: 1,
+      splash: 0,
+      ownerKind: 'train',
+      ownerId: a.id,
+    });
+    await b.waitFor(() => b.of('snap').some((s) => (s.me?.sq ?? 0) >= 1));
+    const snap = b.of('snap').find((s) => (s.me?.sq ?? 0) >= 1) as SnapshotMsg;
+    const me = snap.me!;
+    expect(me.sq).toBe(1);
+    expect(me.cs).toHaveLength(4);
+    expect(me.fl & TRAIN_FLAG_DEAD).toBe(0);
+    expect(me.fl & TRAIN_FLAG_PROTECTED).toBe(TRAIN_FLAG_PROTECTED);
+    expect(me.hp).toBe(me.mh);
+    expect(Math.hypot(me.x - before.x, me.y - before.y)).toBeGreaterThan(100);
+    // The kill was announced to the victim, who is still the same session and train id.
+    const kill = b
+      .of('snap')
+      .flatMap((x) => x.ev)
+      .find((e) => e.type === 'trainDestroyed');
+    expect(kill).toMatchObject({ victimId: b.id, killerTrainId: a.id, cause: 'weapon' });
+    expect(server!.world.getTrain(b.id)?.carriages).toHaveLength(2);
   });
 
   it('announces a newly picked-up carriage kind in meta', async () => {
@@ -327,13 +381,16 @@ describe('bots', () => {
     expect(after).toMatchObject({ bots: 6, humans: 1 });
   });
 
-  it('replaces a destroyed bot', async () => {
+  it('respawns a destroyed bot as a starter train', async () => {
     await start();
     const world = server!.world;
     const bot = world.state.trains.find((t) => t.controller === 'bot')!;
     bot.alive = false;
     await sleep(120);
-    expect(world.getTrain(bot.id)).toBeUndefined();
+    const back = world.getTrain(bot.id)!;
+    expect(back.alive).toBe(true);
+    expect(back.spawnSeq).toBe(1);
+    expect(back.carriages.map((c) => c.kind)).toEqual(['locomotive', 'mg']);
     expect(world.state.trains.filter((t) => t.controller === 'bot')).toHaveLength(6);
   });
 });

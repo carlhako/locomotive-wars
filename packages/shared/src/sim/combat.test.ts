@@ -27,8 +27,8 @@ function inject(world: World, p: Projectile): void {
 describe('weapon fire along aim', () => {
   it("fires an MG along the aim angle at another train's head", () => {
     const world = emptyWorld();
-    const a = world.addTrain({ x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
-    world.addTrain({ x: 1300, y: 1000, angle: Math.PI });
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
+    world.addTrain({ protectedFor: 0, carriages: [], x: 1300, y: 1000, angle: Math.PI });
     world.setInput(a.id, { aim: 0.1 });
     const events = world.step();
     const fired = ofType(events, 'fired');
@@ -42,8 +42,14 @@ describe('weapon fire along aim', () => {
 
   it('does not fire without a hostile in range', () => {
     const world = emptyWorld();
-    const a = world.addTrain({ x: 1000, y: 1000, angle: 0, carriages: ['mg', 'laser', 'missile'] });
-    world.addTrain({ x: 2000, y: 1000, angle: 0 });
+    const a = world.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      angle: 0,
+      carriages: ['mg', 'laser', 'missile'],
+    });
+    world.addTrain({ protectedFor: 0, carriages: [], x: 2000, y: 1000, angle: 0 });
     const events = run(world, 5);
     expect(ofType(events, 'fired')).toHaveLength(0);
     expect(world.state.projectiles.filter((p) => p.ownerId === a.id)).toHaveLength(0);
@@ -51,15 +57,15 @@ describe('weapon fire along aim', () => {
 
   it('does not fire when the aim is outside the carriage arc', () => {
     const world = emptyWorld();
-    const a = world.addTrain({ x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
-    world.addTrain({ x: 1300, y: 1000, angle: Math.PI });
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
+    world.addTrain({ protectedFor: 0, carriages: [], x: 1300, y: 1000, angle: Math.PI });
     world.setInput(a.id, { aim: Math.PI });
     expect(ofType(run(world, 5), 'fired')).toHaveLength(0);
   });
 
   it('respects fire rate: about 7 MG shots per second', () => {
     const world = emptyWorld();
-    const a = world.addTrain({ x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
     a.hull = a.maxHull = 1e9;
     // A stationary target so the shots keep flowing.
     world.spawnEnemy('sentry', 1300, 1000);
@@ -72,7 +78,7 @@ describe('weapon fire along aim', () => {
 
   it('fires counter-drones at enemies in range', () => {
     const world = emptyWorld();
-    world.addTrain({ x: 1000, y: 1000, angle: 0, carriages: ['drones'] });
+    world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['drones'] });
     world.spawnEnemy('sentry', 1150, 1000);
     const events = run(world, 3);
     expect(ofType(events, 'fired').some((f) => f.weapon === 'drone')).toBe(true);
@@ -82,7 +88,7 @@ describe('weapon fire along aim', () => {
 describe('projectile hits', () => {
   it('does not let a fast laser tunnel through a train head', () => {
     const world = emptyWorld();
-    const train = world.addTrain({ x: 2000, y: 2000, angle: 0 });
+    const train = world.addTrain({ protectedFor: 0, carriages: [], x: 2000, y: 2000, angle: 0 });
     // The head will be at x=2006 after its move; the laser steps 1991 -> 2021, with both
     // endpoints outside the 14-unit hit radius.
     inject(world, shot({ x: 1991, y: 2000, vx: 900 }));
@@ -95,7 +101,7 @@ describe('projectile hits', () => {
 
   it('never damages its owner', () => {
     const world = emptyWorld();
-    const train = world.addTrain({ x: 2000, y: 2000, angle: 0 });
+    const train = world.addTrain({ protectedFor: 0, carriages: [], x: 2000, y: 2000, angle: 0 });
     inject(world, shot({ x: 2004, y: 2000, vx: 100, ownerId: train.id }));
     const events = world.step();
     expect(ofType(events, 'hit')).toHaveLength(0);
@@ -104,7 +110,13 @@ describe('projectile hits', () => {
 
   it('hits across the map seam', () => {
     const world = emptyWorld();
-    const train = world.addTrain({ x: 5, y: 3000, angle: Math.PI / 2 });
+    const train = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      x: 5,
+      y: 3000,
+      angle: Math.PI / 2,
+    });
     inject(world, shot({ x: 5990, y: 3003, vx: 900 }));
     world.step();
     expect(train.hull).toBeLessThan(train.maxHull - 1);
@@ -112,8 +124,20 @@ describe('projectile hits', () => {
 
   it('applies the earliest hit when several targets are in the path', () => {
     const world = emptyWorld();
-    const near = world.addTrain({ x: 2020, y: 2000, angle: Math.PI / 2 });
-    const far = world.addTrain({ x: 2030, y: 2000, angle: Math.PI / 2 });
+    const near = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      x: 2020,
+      y: 2000,
+      angle: Math.PI / 2,
+    });
+    const far = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      x: 2030,
+      y: 2000,
+      angle: Math.PI / 2,
+    });
     inject(world, shot({ x: 2000, y: 2000, vx: 900, damage: 20 }));
     world.step();
     expect(near.hull).toBeLessThan(near.maxHull - 10);
@@ -151,7 +175,13 @@ describe('projectile hits', () => {
 
   it('shots from one train can hit another train', () => {
     const world = emptyWorld();
-    const victim = world.addTrain({ x: 2000, y: 2000, angle: Math.PI / 2 });
+    const victim = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      x: 2000,
+      y: 2000,
+      angle: Math.PI / 2,
+    });
     inject(world, shot({ x: 1980, y: 2000, vx: 600, damage: 7, kind: 'bullet' }));
     const events = world.step();
     const hit = ofType(events, 'hit')[0];
@@ -169,6 +199,7 @@ describe('projectile hits', () => {
   it('reports the amount actually dealt after shield reduction', () => {
     const world = emptyWorld();
     const victim = world.addTrain({
+      protectedFor: 0,
       x: 2000,
       y: 2000,
       angle: Math.PI / 2,

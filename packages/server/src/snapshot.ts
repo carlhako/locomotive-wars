@@ -6,6 +6,7 @@ import {
   TRAIN_FLAG_BOOST,
   TRAIN_FLAG_BRIDGE,
   TRAIN_FLAG_DEAD,
+  TRAIN_FLAG_PROTECTED,
   fuelCapacityOf,
 } from '@lw/shared';
 import type {
@@ -29,7 +30,8 @@ function flagsOf(t: TrainState): number {
   return (
     (t.bridgeActive ? TRAIN_FLAG_BRIDGE : 0) |
     (t.boosting ? TRAIN_FLAG_BOOST : 0) |
-    (t.alive ? 0 : TRAIN_FLAG_DEAD)
+    (t.alive ? 0 : TRAIN_FLAG_DEAD) |
+    (t.protectedFor > 0 ? TRAIN_FLAG_PROTECTED : 0)
   );
 }
 
@@ -49,6 +51,7 @@ export function ownTrainOf(t: TrainState): OwnTrain {
     f: r1(t.fuel),
     fm: r1(fuelCapacityOf(t)),
     fl: flagsOf(t),
+    sq: t.spawnSeq,
     cs: carriageCoords(t),
     dn: t.drones.map((d) => ang(d.angle)),
   };
@@ -63,6 +66,7 @@ export function trainRowOf(t: TrainState): TrainRow {
     round(t.hull),
     round(t.maxHull),
     flagsOf(t),
+    t.spawnSeq,
     ...carriageCoords(t),
   ];
 }

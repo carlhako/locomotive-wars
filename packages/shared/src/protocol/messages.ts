@@ -8,7 +8,7 @@ import type {
 } from '../sim/types.ts';
 
 /** Bumped on any incompatible change to the message shapes. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /**
  * The wire protocol, JSON for the beta. Keys are short and entity lists are arrays of numbers to
@@ -58,6 +58,8 @@ void _complete;
 export const TRAIN_FLAG_BRIDGE = 1;
 export const TRAIN_FLAG_BOOST = 2;
 export const TRAIN_FLAG_DEAD = 4;
+/** Spawn protection is active: the client draws a shield ring. */
+export const TRAIN_FLAG_PROTECTED = 8;
 
 // ===== Client to server =====
 
@@ -126,8 +128,22 @@ export interface MetaMsg {
   gone: number[];
 }
 
-/** `[id, x, y, angle, hp, maxHp, flags, ...carriage x/y pairs from the locomotive back]`. */
-export type TrainRow = [number, number, number, number, number, number, number, ...number[]];
+/**
+ * `[id, x, y, angle, hp, maxHp, flags, spawnSeq, ...carriage x/y pairs from the locomotive back]`.
+ * `spawnSeq` changes each time the train respawns, so a client can jump to the new position
+ * instead of drawing the train travelling there.
+ */
+export type TrainRow = [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  ...number[],
+];
 /** `[id, kind index, x, y, angle, hp, maxHp, bossName?]`. */
 export type EnemyRow = [number, number, number, number, number, number, number, string?];
 /** `[id, kind index, x, y]`. */
@@ -150,6 +166,8 @@ export interface OwnTrain {
   fm: number;
   /** Flags, as in a train row. */
   fl: number;
+  /** Spawn counter, as in a train row. */
+  sq: number;
   /** Carriage x/y pairs from the locomotive back. */
   cs: number[];
   /** Drone orbit angles. */
@@ -269,7 +287,7 @@ function numRows(v: unknown, minLength: number): boolean {
 
 function isOwnTrain(v: unknown): v is OwnTrain {
   if (!isObject(v)) return false;
-  const nums = [v.x, v.y, v.a, v.hp, v.mh, v.f, v.fm, v.fl];
+  const nums = [v.x, v.y, v.a, v.hp, v.mh, v.f, v.fm, v.fl, v.sq];
   return (
     nums.every(isNum) &&
     Array.isArray(v.cs) &&
@@ -333,7 +351,7 @@ export function decodeServerMessage(raw: string): ServerMessage | null {
         isNum(m.st) &&
         isInt(m.ack) &&
         (m.me === null || isOwnTrain(m.me)) &&
-        numRows(m.tr, 7) &&
+        numRows(m.tr, 8) &&
         numRows(m.en, 7) &&
         numRows(m.tl, 4) &&
         numRows(m.dr, 5) &&

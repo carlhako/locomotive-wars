@@ -81,6 +81,9 @@ export function createTrain(spawn: TrainSpawn, rules: TrainRules): TrainState {
       targetX: spawn.x,
       targetY: spawn.y,
     },
+    protectedFor: 0,
+    spawnSeq: 0,
+    kills: 0,
   };
   const pos = sampleBehind(train.path, rules.spacing, rules.size);
   train.carriages.push({ kind: 'locomotive', x: pos.x, y: pos.y, angle: pos.angle });

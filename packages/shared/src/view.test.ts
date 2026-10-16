@@ -5,8 +5,23 @@ import { viewFromWorld } from './view.ts';
 describe('viewFromWorld', () => {
   it('maps trains, trailers, and enemies with their positions', () => {
     const world = emptyWorld();
-    const a = world.addTrain({ name: 'Alpha', x: 1000, y: 1500, angle: 0, carriages: ['mg'] });
-    const b = world.addTrain({ name: 'Beta', x: 3000, y: 2500, angle: 1, controller: 'bot' });
+    const a = world.addTrain({
+      protectedFor: 0,
+      name: 'Alpha',
+      x: 1000,
+      y: 1500,
+      angle: 0,
+      carriages: ['mg'],
+    });
+    const b = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      name: 'Beta',
+      x: 3000,
+      y: 2500,
+      angle: 1,
+      controller: 'bot',
+    });
     world.spawnTrailer(100, 200, 'laser');
     world.spawnTrailer(300, 400, 'shield');
     world.spawnTrailer(500, 600, 'fuel');
@@ -37,7 +52,7 @@ describe('viewFromWorld', () => {
 
   it('reports hull and fuel for the HUD', () => {
     const world = emptyWorld();
-    const t = world.addTrain({ carriages: ['armor', 'fuel'] });
+    const t = world.addTrain({ protectedFor: 0, carriages: ['armor', 'fuel'] });
     t.hull = t.maxHull * 0.4;
 
     const v = viewFromWorld(world, t.id).trains[0]!;
@@ -50,9 +65,9 @@ describe('viewFromWorld', () => {
 
   it('marks exactly one living train as local on the minimap', () => {
     const world = emptyWorld();
-    const me = world.addTrain({ x: 100, y: 100 });
-    world.addTrain({ x: 2000, y: 2000, controller: 'bot' });
-    world.addTrain({ x: 4000, y: 4000, controller: 'bot' });
+    const me = world.addTrain({ protectedFor: 0, carriages: [], x: 100, y: 100 });
+    world.addTrain({ protectedFor: 0, carriages: [], x: 2000, y: 2000, controller: 'bot' });
+    world.addTrain({ protectedFor: 0, carriages: [], x: 4000, y: 4000, controller: 'bot' });
 
     const view = viewFromWorld(world, me.id);
 
@@ -63,8 +78,14 @@ describe('viewFromWorld', () => {
 
   it('leaves destroyed trains off the minimap but in the train list', () => {
     const world = emptyWorld();
-    const me = world.addTrain({ x: 100, y: 100 });
-    const dead = world.addTrain({ x: 2000, y: 2000, controller: 'bot' });
+    const me = world.addTrain({ protectedFor: 0, carriages: [], x: 100, y: 100 });
+    const dead = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      x: 2000,
+      y: 2000,
+      controller: 'bot',
+    });
     dead.alive = false;
 
     const view = viewFromWorld(world, me.id);
@@ -75,7 +96,7 @@ describe('viewFromWorld', () => {
 
   it('is plain data that shares nothing with the world', () => {
     const world = emptyWorld({ initialEnemies: 3, maxEnemies: 3 });
-    const me = world.addTrain({ carriages: ['mg', 'drones'] });
+    const me = world.addTrain({ protectedFor: 0, carriages: ['mg', 'drones'] });
     const view = viewFromWorld(world, me.id);
     const before = JSON.stringify(view);
 

@@ -8,6 +8,9 @@ function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
 }
 
+/** Radius in pixels of the spawn-protection ring. */
+const SHIELD_RING_RADIUS = 24;
+
 /** Other trains' names and details show only within this distance of the local head. */
 const NAME_RANGE = 400;
 
@@ -92,6 +95,7 @@ export function drawTrain(env: DrawEnv, train: TrainView, opts: TrainDrawOptions
   const px = screenX(env, train.x);
   const py = screenY(env, train.y);
   drawHead(ctx, train, px, py, opts.flashing);
+  if (train.protected) drawShieldRing(env, px, py);
 
   const showName =
     opts.isLocal ||
@@ -119,6 +123,21 @@ export function drawTrain(env: DrawEnv, train: TrainView, opts: TrainDrawOptions
     ctx.textBaseline = 'middle';
     ctx.fillText(`${cars.length} cars`, px, py - 12);
   }
+}
+
+/** Spawn protection: a pulsing ring around the head. */
+function drawShieldRing(env: DrawEnv, px: number, py: number): void {
+  const { ctx } = env;
+  const pulse = 0.5 + 0.5 * Math.sin(env.time * 8);
+  ctx.save();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = `rgba(102, 255, 255, ${0.55 + 0.35 * pulse})`;
+  ctx.fillStyle = `rgba(102, 255, 255, ${0.08 + 0.06 * pulse})`;
+  ctx.beginPath();
+  ctx.arc(px, py, SHIELD_RING_RADIUS + pulse * 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawCarriage(

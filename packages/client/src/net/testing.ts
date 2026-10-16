@@ -1,4 +1,4 @@
-import type { OwnTrain, SnapshotMsg, TrainMeta } from '@lw/shared';
+import type { OwnTrain, SnapshotMsg, TrainMeta, TrainRow } from '@lw/shared';
 
 /** Test helpers for the networking layer; not used by the game. */
 
@@ -18,6 +18,18 @@ export function makeSnapshot(over: Partial<SnapshotMsg> & { st: number }): Snaps
   };
 }
 
+/** A train row as the server sends it: id, pose, hull, flags, spawn counter, then carriages. */
+export function makeRow(
+  id: number,
+  x: number,
+  y: number,
+  a = 0,
+  coords: number[] = [],
+  over: { flags?: number; spawnSeq?: number } = {},
+): TrainRow {
+  return [id, x, y, a, 50, 100, over.flags ?? 0, over.spawnSeq ?? 0, ...coords];
+}
+
 export function makeOwn(over: Partial<OwnTrain> = {}): OwnTrain {
   return {
     x: 1000,
@@ -28,6 +40,7 @@ export function makeOwn(over: Partial<OwnTrain> = {}): OwnTrain {
     f: 100,
     fm: 100,
     fl: 0,
+    sq: 0,
     cs: [],
     dn: [],
     ...over,

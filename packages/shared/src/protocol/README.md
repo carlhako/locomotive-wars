@@ -10,7 +10,7 @@ numbers to keep snapshots small. Binary encoding and delta compression are a lat
 
 ## Versioning
 
-`PROTOCOL_VERSION` (currently `1`) is bumped on any incompatible change to a message. The first
+`PROTOCOL_VERSION` (currently `2`) is bumped on any incompatible change to a message. The first
 message a client sends is `hello` carrying its version; a server that does not speak it replies
 `reject` with reason `version` and closes the socket. The client then tells the player to reload.
 
@@ -55,21 +55,27 @@ A client never sends a position. Unknown fields are dropped when a message is de
 
 ### `snap`
 
-| Key   | Content                                                                                                                                                   |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `k`   | Simulation tick                                                                                                                                           |
-| `st`  | Server time of the tick in ms (`k × 1000 / 30`); the clock `pong.st` also uses                                                                            |
-| `ack` | Sequence number of the last `in` applied to the session's train                                                                                           |
-| `me`  | The session's own train in full: `x y a hp mh f fm fl cs dn` (position, heading, hull, max hull, fuel, max fuel, flags, carriage x/y pairs, drone angles) |
-| `tr`  | Other trains in view: `[id, x, y, angle, hp, maxHp, flags, ...carriage x/y pairs]`                                                                        |
-| `en`  | Enemies: `[id, kind, x, y, angle, hp, maxHp, bossName?]`                                                                                                  |
-| `tl`  | Trailers: `[id, kind, x, y]`                                                                                                                              |
-| `dr`  | Dropped pickups: `[id, kind, x, y, age]`                                                                                                                  |
-| `pr`  | Projectiles: `[id, kind, x, y, vx, vy]`                                                                                                                   |
-| `ev`  | Simulation events since the previous snapshot (see below)                                                                                                 |
+| Key   | Content                                                                                                                                                                     |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `k`   | Simulation tick                                                                                                                                                             |
+| `st`  | Server time of the tick in ms (`k × 1000 / 30`); the clock `pong.st` also uses                                                                                              |
+| `ack` | Sequence number of the last `in` applied to the session's train                                                                                                             |
+| `me`  | The session's own train in full: `x y a hp mh f fm fl sq cs dn` (position, heading, hull, max hull, fuel, max fuel, flags, spawn counter, carriage x/y pairs, drone angles) |
+| `tr`  | Other trains in view: `[id, x, y, angle, hp, maxHp, flags, spawnSeq, ...carriage x/y pairs]`                                                                                |
+| `en`  | Enemies: `[id, kind, x, y, angle, hp, maxHp, bossName?]`                                                                                                                    |
+| `tl`  | Trailers: `[id, kind, x, y]`                                                                                                                                                |
+| `dr`  | Dropped pickups: `[id, kind, x, y, age]`                                                                                                                                    |
+| `pr`  | Projectiles: `[id, kind, x, y, vx, vy]`                                                                                                                                     |
+| `ev`  | Simulation events since the previous snapshot (see below)                                                                                                                   |
 
 - Kinds are indexes into `ENEMY_KINDS`, `PICKUP_KINDS`, and `PROJECTILE_KINDS`.
-- Flags are a bitmask: `TRAIN_FLAG_BRIDGE` (1), `TRAIN_FLAG_BOOST` (2), `TRAIN_FLAG_DEAD` (4).
+- Flags are a bitmask: `TRAIN_FLAG_BRIDGE` (1), `TRAIN_FLAG_BOOST` (2), `TRAIN_FLAG_DEAD` (4),
+  `TRAIN_FLAG_PROTECTED` (8, spawn protection is active).
+- `spawnSeq` / `sq` counts the train's respawns. When it differs between two snapshots the client
+  does not blend the train's positions (and snaps its camera, for its own train), so a respawned
+  train appears at its new spot instead of sweeping across the map.
+- `ev` holds raw simulation events. A `trainDestroyed` carries `victimId`, `cause` (`ram`, `weapon`,
+  `enemy`, `boss`), and `killerTrainId` or `killerEnemyId`.
 - Positions are rounded to whole units and angles to 2 decimals; angles are normalised to [-π, π].
 - Carriage angles are not sent. Each carriage points toward the one in front of it, which the client
   works out from the positions. Carriage kinds come from `meta`.

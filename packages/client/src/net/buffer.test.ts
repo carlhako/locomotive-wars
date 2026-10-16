@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TrainMeta } from '@lw/shared';
 import { SnapshotBuffer } from './buffer.ts';
-import { makeMeta, makeOwn, makeSnapshot } from './testing.ts';
+import { makeMeta, makeOwn, makeRow, makeSnapshot } from './testing.ts';
 import { deriveCarriageAngles } from './view.ts';
 
 const SIZE = 6000;
@@ -11,9 +11,7 @@ const meta = new Map<number, TrainMeta>([
   [7, makeMeta(7, ['locomotive', 'mg', 'drones'])],
 ]);
 
-function row(id: number, x: number, y: number, a = 0, coords: number[] = []) {
-  return [id, x, y, a, 50, 100, 0, ...coords] as [number, ...number[]] as never;
-}
+const row = makeRow;
 
 describe('SnapshotBuffer', () => {
   it('returns null before any snapshot', () => {
@@ -48,6 +46,43 @@ describe('SnapshotBuffer', () => {
       expect(step).toBeCloseTo(2, 6);
     }
     expect(xs[5]).toBeCloseTo(0, 6);
+  });
+
+  it('never draws a respawned train between its old and new spawn positions', () => {
+    const buf = new SnapshotBuffer(SIZE);
+    buf.push(
+      makeSnapshot({ st: 1000, tr: [row(7, 500, 500, 0, [], { spawnSeq: 0 })] }),
+      LOCAL,
+      meta,
+    );
+    buf.push(
+      makeSnapshot({ st: 1100, tr: [row(7, 4500, 4200, 1, [], { spawnSeq: 1, flags: 8 })] }),
+      LOCAL,
+      meta,
+    );
+    for (let t = 1000; t <= 1100; t += 5) {
+      const train = buf.sample(t, meta)?.trains.find((x) => x.id === 7);
+      const atOld = train?.x === 500 && train?.y === 500;
+      const atNew = train?.x === 4500 && train?.y === 4200;
+      expect(atOld || atNew, `at ${t} ms: ${train?.x},${train?.y}`).toBe(true);
+    }
+    const after = buf.sample(1100, meta)?.trains.find((x) => x.id === 7);
+    expect(after).toMatchObject({ spawnSeq: 1, protected: true });
+  });
+
+  it('still interpolates a train whose spawn counter did not change', () => {
+    const buf = new SnapshotBuffer(SIZE);
+    buf.push(
+      makeSnapshot({ st: 1000, tr: [row(7, 100, 100, 0, [], { spawnSeq: 2 })] }),
+      LOCAL,
+      meta,
+    );
+    buf.push(
+      makeSnapshot({ st: 1100, tr: [row(7, 200, 100, 0, [], { spawnSeq: 2 })] }),
+      LOCAL,
+      meta,
+    );
+    expect(buf.sample(1050, meta)?.trains.find((x) => x.id === 7)?.x).toBeCloseTo(150, 6);
   });
 
   it('interpolates angles by the short way round', () => {

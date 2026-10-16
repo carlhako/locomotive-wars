@@ -39,6 +39,10 @@ export interface TrainView {
   bridge: boolean;
   /** True on a tick the train moved at boost speed. */
   boosting: boolean;
+  /** True while spawn protection is active (the client draws a shield ring). */
+  protected: boolean;
+  /** Changes each time the train respawns, so interpolation never spans a respawn. */
+  spawnSeq: number;
   /** Index 0 is the locomotive. */
   carriages: CarriageView[];
   /** Orbit angle of each counter-drone around the head. */
@@ -123,6 +127,8 @@ export function viewFromWorld(world: World, localId: number): WorldView {
     fuelMax: fuelCapacityOf(t),
     bridge: t.bridgeActive,
     boosting: t.boosting,
+    protected: t.protectedFor > 0,
+    spawnSeq: t.spawnSeq,
     carriages: t.carriages.map((c) => ({ kind: c.kind, x: c.x, y: c.y, angle: c.angle })),
     drones: t.drones.map((d) => d.angle),
   }));

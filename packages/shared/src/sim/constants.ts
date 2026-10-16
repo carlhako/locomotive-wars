@@ -114,10 +114,14 @@ export const ENEMY_RESPAWN_SPAN = 1.0;
 export const TRAILER_SPAWN_MARGIN = 100;
 /** ref:1626 */
 export const ENEMY_SPAWN_MARGIN = 150;
-/** ref:990-994: train spawn margin, tries, and clearance from other trains. */
-export const TRAIN_SPAWN_MARGIN = 200;
+/** ref:990-994: train spawn margin, tries, and clearance from other trains (changed: margin 100). */
+export const TRAIN_SPAWN_MARGIN = 100;
 export const TRAIN_SPAWN_TRIES = 20;
 export const TRAIN_SPAWN_CLEARANCE = 800;
+/** new: a spawn is also kept this far from living enemies. */
+export const TRAIN_SPAWN_ENEMY_CLEARANCE = 300;
+/** new: seconds a freshly spawned train cannot be harmed, ram, or fire (replaces ref:1127's global grace). */
+export const SPAWN_PROTECTION = 3.5;
 
 /** Default colors for trains (ref:292). */
 export const TRAIN_COLORS: readonly string[] = [
@@ -142,6 +146,10 @@ export const HEAD_RADIUS = 14;
 export const ENEMY_HIT_RADIUS = 18;
 /** ref:1318 */
 export const BOSS_HIT_RADIUS = 28;
+/** new: a head within this distance of another train's lethal carriage is destroyed. */
+export const BODY_COLLISION_RADIUS = 14;
+/** new: carriages before this index are not lethal (the locomotive and the two behind it). */
+export const BODY_COLLISION_MIN_INDEX = 3;
 /** ref:1604 */
 export const RAM_RADIUS = 16;
 /** ref:1605 */

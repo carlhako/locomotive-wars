@@ -1,5 +1,5 @@
 import { wrapDist } from '@lw/shared';
-import type { SimEvent, WorldView } from '@lw/shared';
+import type { EnemyKind, SimEvent, WorldView } from '@lw/shared';
 import type { SoundPlayer } from '../audio/sound.ts';
 import type { BannerSink, ScreenFlashSink } from '../hud/banner.ts';
 import type { KillFeedSink } from '../hud/killfeed.ts';
@@ -70,6 +70,54 @@ export interface FxContext {
 }
 
 const BOSS_COLOR = '#ff88ff';
+const ENEMY_COLOR = '#ff8844';
+
+type TrainDestroyedEvent = Extract<SimEvent, { type: 'trainDestroyed' }>;
+
+const ENEMY_LABELS: Record<EnemyKind, string> = {
+  drone: 'Drone',
+  hunter: 'Hunter',
+  sentry: 'Sentry',
+  boss: 'Boss',
+};
+
+/** What killed the train: a name and colour for the kill feed, or null when nobody is credited. */
+function killerOf(
+  e: TrainDestroyedEvent,
+  view: WorldView,
+  names: NameBook,
+): { name: string; color: string | undefined; generic?: boolean } | null {
+  if (e.killerTrainId !== undefined) {
+    return { name: names.name(e.killerTrainId), color: names.color(e.killerTrainId) };
+  }
+  if (e.killerEnemyId !== undefined) {
+    const enemy = view.enemies.find((en) => en.id === e.killerEnemyId);
+    if (e.cause === 'boss') {
+      return enemy?.name
+        ? { name: enemy.name, color: BOSS_COLOR }
+        : { name: 'The boss', color: BOSS_COLOR, generic: true };
+    }
+    return enemy
+      ? { name: ENEMY_LABELS[enemy.kind], color: ENEMY_COLOR }
+      : { name: 'An enemy', color: ENEMY_COLOR, generic: true };
+  }
+  return null;
+}
+
+/** The notice shown to a player whose train was just destroyed. */
+export function destroyedNotice(e: TrainDestroyedEvent, view: WorldView, names: NameBook): string {
+  const killer = killerOf(e, view, names);
+  if (!killer) return 'Wrecked';
+  // Generic fallbacks read as a phrase ("an enemy"); named killers keep their case.
+  return `Destroyed by ${killer.generic ? killer.name.toLowerCase() : killer.name}`;
+}
+
+const CAUSE_VERBS: Record<TrainDestroyedEvent['cause'], string> = {
+  ram: 'rammed',
+  weapon: 'shot',
+  enemy: 'destroyed',
+  boss: 'destroyed',
+};
 
 /**
  * Turns a tick's simulation events into presentation: particles, damage numbers, shake, flashes,
@@ -192,13 +240,14 @@ export function applyEvents(events: readonly SimEvent[], ctx: FxContext, fx: FxT
         if (victimIsLocal || audible(e.x, e.y)) fx.sound.explosion(true);
 
         const victim = names.name(e.victimId);
-        if (e.sourceKind === 'train' && e.sourceId !== null) {
+        const killer = killerOf(e, view, names);
+        if (killer) {
           fx.killFeed.add({
-            killer: names.name(e.sourceId),
-            killerColor: names.color(e.sourceId),
+            killer: killer.name,
+            killerColor: killer.color,
             victim,
             victimColor: color,
-            weapon: 'destroyed',
+            weapon: CAUSE_VERBS[e.cause],
             style: 'normal',
           });
         } else {
@@ -214,8 +263,8 @@ export function applyEvents(events: readonly SimEvent[], ctx: FxContext, fx: FxT
           fx.shake.add(25, 1.0);
           fx.screenFlash.show();
           fx.sound.death();
-          fx.banner.show('TRAIN DESTROYED', '', '#ff4444');
-        } else if (e.sourceKind === 'train' && e.sourceId === localId) {
+          fx.banner.show(destroyedNotice(e, view, names), '', '#ff4444');
+        } else if (e.killerTrainId === localId) {
           fx.banner.popup(`KILL  ${victim}`, '#ffeb3b');
         }
         break;

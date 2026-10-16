@@ -20,12 +20,16 @@ export function interpolateView(
   const ang = (from: number, to: number): number => from + shortAngle(to - from) * a;
 
   const prevTrains = new Map(prev.trains.map((t) => [t.id, t]));
+  const currTrains = new Map(curr.trains.map((t) => [t.id, t]));
   const prevEnemies = new Map(prev.enemies.map((e) => [e.id, e]));
   const prevShots = new Map(prev.projectiles.map((p) => [p.id, p]));
 
   const minimap = curr.minimap.map((m) => {
     const p = prevTrains.get(m.id);
-    return p?.alive ? { ...m, x: pos(p.x, m.x), y: pos(p.y, m.y) } : m;
+    const c = currTrains.get(m.id);
+    return p?.alive && p.spawnSeq === (c?.spawnSeq ?? p.spawnSeq)
+      ? { ...m, x: pos(p.x, m.x), y: pos(p.y, m.y) }
+      : m;
   });
 
   return {
@@ -33,8 +37,9 @@ export function interpolateView(
     time: prev.time + (curr.time - prev.time) * a,
     trains: curr.trains.map((t) => {
       const p = prevTrains.get(t.id);
-      // A dead train, or one that just respawned, has nothing meaningful to blend from.
-      if (!p || !p.alive || !t.alive) return t;
+      // A dead train, or one that respawned in between, has nothing meaningful to blend from:
+      // blending would draw it sweeping across the map from its old position.
+      if (!p || !p.alive || !t.alive || p.spawnSeq !== t.spawnSeq) return t;
       const carriages: CarriageView[] =
         p.carriages.length === t.carriages.length
           ? t.carriages.map((c, i) => {

@@ -149,8 +149,8 @@ describe('applyEvents', () => {
         {
           type: 'trainDestroyed',
           victimId: rival.id,
-          sourceKind: 'train',
-          sourceId: me.id,
+          cause: 'weapon',
+          killerTrainId: me.id,
           x: 1200,
           y: 1000,
         },
@@ -160,7 +160,12 @@ describe('applyEvents', () => {
     );
 
     expect(rec.feed).toHaveLength(1);
-    expect(rec.feed[0]).toMatchObject({ killer: 'You', victim: 'IronWolf', style: 'normal' });
+    expect(rec.feed[0]).toMatchObject({
+      killer: 'You',
+      victim: 'IronWolf',
+      weapon: 'shot',
+      style: 'normal',
+    });
     // The local player scored it, so they get the kill popup but no death effects.
     expect(rec.popups).toHaveLength(1);
     expect(rec.shakes).toHaveLength(0);
@@ -175,8 +180,8 @@ describe('applyEvents', () => {
         {
           type: 'trainDestroyed',
           victimId: me.id,
-          sourceKind: 'train',
-          sourceId: rival.id,
+          cause: 'weapon',
+          killerTrainId: rival.id,
           x: 1000,
           y: 1000,
         },
@@ -190,9 +195,102 @@ describe('applyEvents', () => {
     expect(rec.sounds).toContain('death');
     expect(rec.feed[0]).toMatchObject({ killer: 'IronWolf', victim: 'You' });
     expect(rec.particles.length).toBeGreaterThanOrEqual(60);
+    expect(rec.banners).toEqual([{ text: 'Destroyed by IronWolf', sub: '', color: '#ff4444' }]);
   });
 
-  it('shows enemy kills as system lines and never shakes for non-local deaths', () => {
+  it('shows a ram in the kill feed with the body owner as killer', () => {
+    const { me, rival, ctx } = scene();
+    const { fx, rec } = recorder();
+
+    applyEvents(
+      [
+        {
+          type: 'trainDestroyed',
+          victimId: rival.id,
+          cause: 'ram',
+          killerTrainId: me.id,
+          x: 1200,
+          y: 1000,
+        },
+      ],
+      ctx,
+      fx,
+    );
+
+    expect(rec.feed).toHaveLength(1);
+    expect(rec.feed[0]).toMatchObject({
+      killer: 'You',
+      victim: 'IronWolf',
+      weapon: 'rammed',
+      style: 'normal',
+    });
+    expect(rec.popups).toHaveLength(1);
+  });
+
+  it('tells a rammed local player who destroyed them', () => {
+    const { me, rival, ctx } = scene();
+    const { fx, rec } = recorder();
+
+    applyEvents(
+      [
+        {
+          type: 'trainDestroyed',
+          victimId: me.id,
+          cause: 'ram',
+          killerTrainId: rival.id,
+          x: 1000,
+          y: 1000,
+        },
+      ],
+      ctx,
+      fx,
+    );
+
+    expect(rec.feed[0]).toMatchObject({ killer: 'IronWolf', victim: 'You', weapon: 'rammed' });
+    expect(rec.banners.map((b) => b.text)).toEqual(['Destroyed by IronWolf']);
+    expect(rec.popups).toHaveLength(0);
+  });
+
+  it('names an enemy in the notice, and falls back to "Wrecked" with no killer', () => {
+    const { me, ctx } = scene();
+    ctx.view.enemies.push({ id: 42, kind: 'sentry', x: 1000, y: 1000, angle: 0, hp: 1, maxHp: 1 });
+    const { fx, rec } = recorder();
+
+    applyEvents(
+      [
+        {
+          type: 'trainDestroyed',
+          victimId: me.id,
+          cause: 'enemy',
+          killerEnemyId: 42,
+          x: 1000,
+          y: 1000,
+        },
+        {
+          type: 'trainDestroyed',
+          victimId: me.id,
+          cause: 'enemy',
+          killerEnemyId: 77,
+          x: 1000,
+          y: 1000,
+        },
+        { type: 'trainDestroyed', victimId: me.id, cause: 'enemy', x: 1000, y: 1000 },
+      ],
+      ctx,
+      fx,
+    );
+
+    expect(rec.banners.map((b) => b.text)).toEqual([
+      'Destroyed by Sentry',
+      'Destroyed by an enemy',
+      'Wrecked',
+    ]);
+    expect(rec.feed[0]).toMatchObject({ killer: 'Sentry', victim: 'You', weapon: 'destroyed' });
+    expect(rec.feed[1]).toMatchObject({ killer: 'An enemy', victim: 'You' });
+    expect(rec.feed[2]).toMatchObject({ victim: 'You', style: 'system' });
+  });
+
+  it('shows unattributed kills as system lines and never shakes for non-local deaths', () => {
     const { rival, ctx } = scene();
     const { fx, rec } = recorder();
 
@@ -201,8 +299,7 @@ describe('applyEvents', () => {
         {
           type: 'trainDestroyed',
           victimId: rival.id,
-          sourceKind: 'enemy',
-          sourceId: 42,
+          cause: 'enemy',
           x: 1200,
           y: 1000,
         },

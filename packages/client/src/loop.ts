@@ -63,6 +63,7 @@ export class Game {
 
   private lastTime = 0;
   private lastGeneration = -1;
+  private lastSpawnSeq = -1;
   private aim: number | null = null;
 
   constructor(private readonly source: GameSource) {
@@ -135,6 +136,7 @@ export class Game {
       this.resetEffects();
       this.lastGeneration = this.source.generation;
       if (local) followCamera(this.camera, local.x, local.y, size, dt, true);
+      this.lastSpawnSeq = local?.spawnSeq ?? -1;
     }
     this.names.observe(view);
     if (this.source.knownTrains) {
@@ -142,7 +144,12 @@ export class Game {
     }
     applyEvents(events, { view, names: this.names, size }, this.fx);
 
-    if (local) followCamera(this.camera, local.x, local.y, size, dt);
+    if (local) {
+      // A respawn puts the train somewhere new: jump the camera there instead of panning.
+      const respawned = local.spawnSeq !== this.lastSpawnSeq;
+      this.lastSpawnSeq = local.spawnSeq;
+      followCamera(this.camera, local.x, local.y, size, dt, respawned);
+    }
 
     this.emitter.update(this.particles, view.trains, dt, (x, y) =>
       onScreen(env, screenX(env, x), screenY(env, y), 150),

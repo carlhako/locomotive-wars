@@ -74,8 +74,8 @@ describe('selectEvents', () => {
     const kill = {
       type: 'trainDestroyed',
       victimId: 8,
-      sourceKind: 'train',
-      sourceId: 9,
+      cause: 'ram',
+      killerTrainId: 9,
       x: 4000,
       y: 4000,
     } as const;

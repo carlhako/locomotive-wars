@@ -1,4 +1,4 @@
-import { TRAIN_FLAG_DEAD, decodeServerMessage, encodeMessage, PROTOCOL_VERSION } from '@lw/shared';
+import { encodeMessage, PROTOCOL_VERSION } from '@lw/shared';
 import { WebSocket } from 'ws';
 import { GameServer } from './server.ts';
 
@@ -33,8 +33,6 @@ interface Slot {
   boost: boolean;
   aim: number;
   seq: number;
-  /** Set once the train is destroyed, so the slot rejoins with a fresh one. */
-  dead: boolean;
 }
 
 function bytesRead(ws: WebSocket): number {
@@ -91,14 +89,12 @@ async function main(): Promise<boolean> {
     boost: false,
     aim: 0,
     seq: 0,
-    dead: false,
   }));
 
   const connect = (slot: Slot): void => {
     const ws = new WebSocket(url);
     slot.ws = ws;
     slot.lastBytes = 0;
-    slot.dead = false;
     ws.on('open', () =>
       ws.send(
         encodeMessage({
@@ -108,10 +104,6 @@ async function main(): Promise<boolean> {
         }),
       ),
     );
-    ws.on('message', (data) => {
-      const msg = decodeServerMessage(String(data));
-      if (msg?.t === 'snap' && msg.me && (msg.me.fl & TRAIN_FLAG_DEAD) !== 0) slot.dead = true;
-    });
     ws.on('error', () => undefined);
   };
   for (const slot of slots) connect(slot);
@@ -138,15 +130,6 @@ async function main(): Promise<boolean> {
     }
   }, 100);
 
-  // A destroyed train stays dead until change 05 adds respawn, so rejoin to keep the load up.
-  const rejoin = setInterval(() => {
-    for (const slot of slots) {
-      if (!slot.dead) continue;
-      slot.ws?.close();
-      connect(slot);
-    }
-  }, 500);
-
   // Let every client join and the first snapshots flow before measuring.
   await new Promise((r) => setTimeout(r, 2000));
   const tick0 = await readTick();
@@ -168,7 +151,6 @@ async function main(): Promise<boolean> {
   const ticks = (await readTick()) - tick0;
   clearInterval(sampler);
   clearInterval(driver);
-  clearInterval(rejoin);
   for (const slot of slots) slot.ws?.close();
 
   const expected = elapsed * TICK_RATE;

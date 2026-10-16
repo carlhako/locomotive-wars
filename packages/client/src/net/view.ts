@@ -6,6 +6,7 @@ import {
   TRAIN_FLAG_BOOST,
   TRAIN_FLAG_BRIDGE,
   TRAIN_FLAG_DEAD,
+  TRAIN_FLAG_PROTECTED,
   TWO_PI,
   wrapDelta,
 } from '@lw/shared';
@@ -106,6 +107,8 @@ export function ownTrainView(
     fuelMax: me.fm,
     bridge: (me.fl & TRAIN_FLAG_BRIDGE) !== 0,
     boosting: (me.fl & TRAIN_FLAG_BOOST) !== 0,
+    protected: (me.fl & TRAIN_FLAG_PROTECTED) !== 0,
+    spawnSeq: me.sq,
     carriages: carriagesOf(meta, me.x, me.y, me.a, me.cs, size),
     drones: [...me.dn],
   };
@@ -125,7 +128,7 @@ export function viewFromSnapshot(
   const trains: TrainView[] = [];
   if (snap.me) trains.push(ownTrainView(localId, snap.me, meta.get(localId), size));
   for (const row of snap.tr) {
-    const [id, x, y, angle, hp, maxHp, flags] = row;
+    const [id, x, y, angle, hp, maxHp, flags, spawnSeq] = row;
     const m = meta.get(id);
     trains.push({
       id,
@@ -143,7 +146,9 @@ export function viewFromSnapshot(
       fuelMax: 1,
       bridge: (flags & TRAIN_FLAG_BRIDGE) !== 0,
       boosting: (flags & TRAIN_FLAG_BOOST) !== 0,
-      carriages: carriagesOf(m, x, y, angle, row.slice(7) as number[], size),
+      protected: (flags & TRAIN_FLAG_PROTECTED) !== 0,
+      spawnSeq,
+      carriages: carriagesOf(m, x, y, angle, row.slice(8) as number[], size),
       drones: [],
     });
   }

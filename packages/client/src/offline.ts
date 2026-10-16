@@ -5,8 +5,6 @@ import type { GameSource } from './source.ts';
 
 /** Bots alongside a single human, matching the reference's one-player game (line 1148). */
 export const OFFLINE_BOTS = 6;
-/** Seconds between the local train being destroyed and the session restarting. */
-export const RESTART_DELAY = 1.5;
 /** Longest real time a single frame may add to the accumulator (a tab that was backgrounded). */
 const MAX_FRAME = 0.25;
 
@@ -14,7 +12,6 @@ export interface OfflineOptions {
   /** World seed. Defaults to the current time so every session differs. */
   seed?: number;
   bots?: number;
-  restartDelay?: number;
   world?: WorldOptions;
 }
 
@@ -29,7 +26,6 @@ export class OfflineSession implements GameSource {
   private accumulator = 0;
   private prev!: WorldView;
   private curr!: WorldView;
-  private restartIn: number | null = null;
   private worldGeneration = 0;
   private readonly opts: OfflineOptions;
 
@@ -55,7 +51,7 @@ export class OfflineSession implements GameSource {
     return this.world;
   }
 
-  /** (Re)creates the world with the player's train and bots. */
+  /** (Re)creates the world with the player's train and bots. Dying respawns; it does not restart. */
   start(): void {
     const world = new World({
       ...this.opts.world,
@@ -68,8 +64,6 @@ export class OfflineSession implements GameSource {
       controller: 'human',
       x: world.rules.size / 2,
       y: world.rules.size / 2,
-      // A starting weapon and shield so the player is not helpless at spawn (reference 1124).
-      carriages: ['mg', 'shield'],
     });
     const names = [...BOT_NAMES];
     for (let i = 0; i < (this.opts.bots ?? OFFLINE_BOTS); i++) {
@@ -85,7 +79,6 @@ export class OfflineSession implements GameSource {
     this.worldGeneration += 1;
     this.localId = player.id;
     this.accumulator = 0;
-    this.restartIn = null;
     this.curr = viewFromWorld(world, player.id);
     this.prev = this.curr;
   }
@@ -96,24 +89,14 @@ export class OfflineSession implements GameSource {
     this.accumulator += Math.min(Math.max(dt, 0), MAX_FRAME);
     while (this.accumulator >= tickDt) {
       this.accumulator -= tickDt;
+      // A destroyed train comes back as a fresh starter at the start of the next tick.
+      for (const t of this.world.state.trains) {
+        if (!t.alive) this.world.respawnTrain(t.id);
+      }
       this.world.setInput(this.localId, input);
-      const tickEvents = this.world.step();
-      for (const e of tickEvents) events.push(e);
+      for (const e of this.world.step()) events.push(e);
       this.prev = this.curr;
       this.curr = viewFromWorld(this.world, this.localId);
-
-      if (this.restartIn === null) {
-        const destroyed = tickEvents.some(
-          (e) => e.type === 'trainDestroyed' && e.victimId === this.localId,
-        );
-        if (destroyed) this.restartIn = this.opts.restartDelay ?? RESTART_DELAY;
-      } else {
-        this.restartIn -= tickDt;
-        if (this.restartIn <= 0) {
-          this.start();
-          break;
-        }
-      }
     }
     return events;
   }

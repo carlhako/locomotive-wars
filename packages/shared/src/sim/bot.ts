@@ -29,7 +29,9 @@ export function botInput(world: World, trainId: number, rng: Rng): TrainInput {
 
   ai.decisionTimer -= world.dt;
   const chased = ai.targetTrainId === null ? undefined : world.getTrain(ai.targetTrainId);
-  const chaseLost = (ai.mode === 'flee' || ai.mode === 'attack') && (!chased || !chased.alive);
+  const chaseLost =
+    (ai.mode === 'flee' || ai.mode === 'attack') &&
+    (!chased || !chased.alive || chased.protectedFor > 0);
   if (ai.decisionTimer <= 0 || chaseLost) decide(world, train, rng);
 
   let targetAngle = train.angle;
@@ -63,7 +65,7 @@ function decide(world: World, train: TrainState, rng: Rng): void {
   let prey: TrainState | null = null;
   let preyDist = BOT_PREY_RANGE;
   for (const t of world.state.trains) {
-    if (t === train || !t.alive) continue;
+    if (t === train || !t.alive || t.protectedFor > 0) continue;
     const d = wrapDist(train.x, train.y, t.x, t.y, size);
     if (t.carriages.length > train.carriages.length + BOT_SIZE_MARGIN && d < threatDist) {
       threatDist = d;
@@ -104,7 +106,7 @@ function decide(world: World, train: TrainState, rng: Rng): void {
   ai.targetY = rng.range(BOT_WANDER_MARGIN, size - BOT_WANDER_MARGIN);
 }
 
-/** Bearing to the nearest enemy or other train's head in weapon range, else straight ahead. */
+/** Bearing to the nearest enemy or unprotected other train's head in weapon range, else straight ahead. */
 function aimAngle(world: World, train: TrainState): number {
   const size = world.rules.size;
   let bestDist = WEAPON_RANGE;
@@ -122,7 +124,7 @@ function aimAngle(world: World, train: TrainState): number {
     }
   }
   for (const t of world.state.trains) {
-    if (t === train || !t.alive) continue;
+    if (t === train || !t.alive || t.protectedFor > 0) continue;
     const d = wrapDist(train.x, train.y, t.x, t.y, size);
     if (d < bestDist) {
       bestDist = d;

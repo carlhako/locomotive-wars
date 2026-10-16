@@ -69,7 +69,7 @@ export function eventInvolves(e: SimEvent, trainId: number): boolean {
     case 'bossDown':
       return e.sourceId === trainId;
     case 'trainDestroyed':
-      return e.victimId === trainId || (e.sourceKind === 'train' && e.sourceId === trainId);
+      return e.victimId === trainId || e.killerTrainId === trainId;
     case 'pickup':
     case 'bridgeOn':
     case 'bridgeOff':

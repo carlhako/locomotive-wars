@@ -62,7 +62,7 @@ curl http://localhost:8080/healthz
   (`src/loop.ts`), a fixed-step loop that runs up to 5 catch-up ticks after a stall and logs an
   overrun if it falls further behind.
 - **Sessions.** A client's first message is `hello`. The server sanitises the name, spawns a train
-  (locomotive, machine gun, shield), and replies `welcome`. When the socket closes the train is
+  (the protected starter: locomotive and machine gun), and replies `welcome`. When the socket closes the train is
   removed and half its carriages drop as pickups, with no kill credited.
 - **Input.** The latest valid `in` message is applied each tick. Turn is clamped, malformed messages
   are ignored, more than 60 inputs a second are dropped, and a connection that sends 20 malformed
@@ -70,11 +70,12 @@ curl http://localhost:8080/healthz
 - **Snapshots.** Every second tick each session gets a snapshot of what is within 1600 units of its
   train (`src/interest.ts`, `src/snapshot.ts`), preceded by a `meta` message when it has new trains
   or carriage kinds to learn about. A 2 Hz overview of all trains feeds the minimap.
-- **Bots.** `src/bots.ts` keeps 6 bot trains in the world and replaces destroyed ones. It is
+- **Bots.** `src/bots.ts` keeps 6 bot trains in the world and respawns destroyed ones. It is
   temporary; change 06 replaces it with configurable bot fill.
 
-A destroyed human train stays in the world, dead, until its player reloads: respawn arrives with
-change 05.
+A destroyed human train is respawned in place at the start of the next tick (`World.respawnTrain`):
+same session and train id, fresh protected starter train at a safe position. Nothing carries over,
+and there is no game-over state. The `trainDestroyed` event names the cause and killer.
 
 ## Soak test
 

@@ -1,5 +1,12 @@
 import { botInput } from './bot.ts';
-import { dropCarriages, fireDrones, fireWeapons, ramEnemies, stepProjectiles } from './combat.ts';
+import {
+  collideTrains,
+  dropCarriages,
+  fireDrones,
+  fireWeapons,
+  ramEnemies,
+  stepProjectiles,
+} from './combat.ts';
 import {
   BOSS_INTERVAL,
   BOSS_REPEAT_FACTOR,
@@ -16,6 +23,7 @@ import {
   MAX_ENEMIES,
   MAX_TRAILERS,
   CARRIAGE_SPACING,
+  SPAWN_PROTECTION,
   TICK_RATE,
   TRAILER_RESPAWN,
   TRAILER_RESPAWN_FLOOR,
@@ -25,6 +33,7 @@ import {
   TRAILER_TYPES,
   TRAIN_COLORS,
   TRAIN_SPAWN_CLEARANCE,
+  TRAIN_SPAWN_ENEMY_CLEARANCE,
   TRAIN_SPAWN_MARGIN,
   TRAIN_SPAWN_TRIES,
 } from './constants.ts';
@@ -46,6 +55,11 @@ import type {
   WorldOptions,
   WorldState,
 } from './types.ts';
+
+/** The starter train: the locomotive plus this carriage. */
+const STARTER_CARRIAGES: readonly PickupKind[] = ['mg'];
+/** Protection timers below this many seconds count as expired. */
+const PROTECTION_EPSILON = 1e-9;
 
 /**
  * The authoritative game world: any number of trains (human or bot), PvE enemies, a boss,
@@ -162,7 +176,11 @@ export class World {
     return this.state.enemies.find((e) => e.id === id);
   }
 
-  /** Adds a train with a locomotive plus any requested carriages. */
+  /**
+   * Adds a train with a locomotive plus the requested carriages (by default one MG, the starter
+   * train), at full hull and fuel, with spawn protection. Position is a safe random one unless
+   * given.
+   */
   addTrain(opts: AddTrainOptions = {}): TrainState {
     const id = this.newId();
     let x = opts.x;
@@ -185,9 +203,46 @@ export class World {
       },
       this.rules,
     );
-    for (const kind of opts.carriages ?? []) addCarriage(train, kind, this.rules, this.rng);
+    for (const kind of opts.carriages ?? STARTER_CARRIAGES) {
+      addCarriage(train, kind, this.rules, this.rng);
+    }
+    train.hull = train.maxHull;
+    train.protectedFor = opts.protectedFor ?? SPAWN_PROTECTION;
     this.state.trains.push(train);
     return train;
+  }
+
+  /**
+   * Resets a train in place to a fresh starter at a new safe position: locomotive plus MG, full
+   * hull and fuel, no upgrades, drones, or trail, and spawn protection. The id, name, colour,
+   * controller, and current controls are kept, so the owner's session stays valid; `spawnSeq`
+   * goes up so clients know to jump rather than slide to the new position. False for an unknown
+   * id.
+   */
+  respawnTrain(id: number): boolean {
+    const old = this.getTrain(id);
+    if (!old) return false;
+    const pos = this.findSpawnPosition(id);
+    const angle = this.rng.range(0, TWO_PI);
+    const fresh = createTrain(
+      {
+        id,
+        name: old.name,
+        color: old.color,
+        controller: old.controller,
+        x: pos.x,
+        y: pos.y,
+        angle,
+      },
+      this.rules,
+    );
+    for (const kind of STARTER_CARRIAGES) addCarriage(fresh, kind, this.rules, this.rng);
+    fresh.hull = fresh.maxHull;
+    fresh.protectedFor = SPAWN_PROTECTION;
+    fresh.spawnSeq = old.spawnSeq + 1;
+    fresh.input = old.input;
+    Object.assign(old, fresh);
+    return true;
   }
 
   /**
@@ -285,6 +340,11 @@ export class World {
 
     for (const train of s.trains) {
       if (!train.alive) continue;
+      if (train.protectedFor > 0) {
+        train.protectedFor -= dt;
+        // Counting down in float steps can leave a sliver at the end of the protection time.
+        if (train.protectedFor < PROTECTION_EPSILON) train.protectedFor = 0;
+      }
       advanceTrain(train, dt, this.rules);
       const bridge = updateBridge(train, this.rules);
       if (bridge !== null) {
@@ -298,6 +358,7 @@ export class World {
       fireWeapons(this, train);
       fireDrones(this, train);
     }
+    collideTrains(this);
 
     if (this.options.boss && s.bossId === null && s.time > BOSS_START_GATE) {
       s.bossTimer -= dt;
@@ -388,16 +449,30 @@ export class World {
     }
   }
 
-  /** Random position away from living trains (best effort after a few tries). */
-  private findSpawnPosition(): { x: number; y: number } {
-    let pos = { x: 0, y: 0 };
+  /**
+   * A random position for a spawning train: the first of up to 20 candidates at least 800 units
+   * from every other living train's head and 300 from every living enemy, else the candidate
+   * farthest from other heads. `exceptId` leaves a train (the one being respawned) out.
+   */
+  findSpawnPosition(exceptId?: number): { x: number; y: number } {
+    const size = this.rules.size;
+    const heads = this.state.trains.filter((t) => t.alive && t.id !== exceptId);
+    const enemies = this.state.enemies.filter((e) => e.hull > 0);
+    let best = { x: 0, y: 0 };
+    let bestDist = -1;
     for (let tries = 0; tries < TRAIN_SPAWN_TRIES; tries++) {
-      pos = this.randomPos(TRAIN_SPAWN_MARGIN);
-      const crowded = this.state.trains.some(
-        (t) => t.alive && wrapDist(pos.x, pos.y, t.x, t.y, this.rules.size) < TRAIN_SPAWN_CLEARANCE,
+      const pos = this.randomPos(TRAIN_SPAWN_MARGIN);
+      let nearest = Infinity;
+      for (const t of heads) nearest = Math.min(nearest, wrapDist(pos.x, pos.y, t.x, t.y, size));
+      const nearEnemy = enemies.some(
+        (e) => wrapDist(pos.x, pos.y, e.x, e.y, size) < TRAIN_SPAWN_ENEMY_CLEARANCE,
       );
-      if (!crowded) break;
+      if (nearest >= TRAIN_SPAWN_CLEARANCE && !nearEnemy) return pos;
+      if (nearest > bestDist) {
+        bestDist = nearest;
+        best = pos;
+      }
     }
-    return pos;
+    return best;
   }
 }
