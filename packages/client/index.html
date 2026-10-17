@@ -67,6 +67,13 @@
         <p><kbd>S</kbd> or <kbd>↓</kbd> — Brake</p>
         <p><kbd>Mouse</kbd> — Aim weapons</p>
       </div>
+      <div id="join-highscores" class="hs-panel">
+        <h2>High scores</h2>
+        <table>
+          <tbody id="join-highscores-rows"></tbody>
+        </table>
+        <p id="join-highscores-empty">No scores yet. Be the first!</p>
+      </div>
       <form id="join-form" autocomplete="off">
         <label for="player-name">Your name</label>
         <input
@@ -83,18 +90,40 @@
     <div id="round-overlay" class="overlay" style="display: none">
       <h1>ROUND OVER</h1>
       <div id="round-winner" class="subtitle"></div>
-      <div class="standings-box">
-        <table id="standings-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th class="name">Player</th>
-              <th>Best</th>
-              <th>Kills</th>
-            </tr>
-          </thead>
-          <tbody id="round-standings"></tbody>
-        </table>
+      <form id="hs-form" autocomplete="off" style="display: none">
+        <div id="hs-title"></div>
+        <div class="hs-row">
+          <input
+            id="hs-name"
+            type="text"
+            maxlength="16"
+            spellcheck="false"
+            aria-label="Your name"
+          />
+          <button id="hs-save" type="submit">Save</button>
+        </div>
+        <div id="hs-status" role="status"></div>
+      </form>
+      <div id="round-columns">
+        <div class="standings-box">
+          <table id="standings-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th class="name">Player</th>
+                <th>Best</th>
+                <th>Kills</th>
+              </tr>
+            </thead>
+            <tbody id="round-standings"></tbody>
+          </table>
+        </div>
+        <div id="round-highscores" class="standings-box hs-panel">
+          <h2>High scores</h2>
+          <table>
+            <tbody id="round-highscores-rows"></tbody>
+          </table>
+        </div>
       </div>
       <p id="round-countdown"></p>
     </div>

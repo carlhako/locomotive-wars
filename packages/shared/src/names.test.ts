@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_NAME_LENGTH, sanitizeName } from './names.ts';
+import { cleanName, MAX_NAME_LENGTH, sanitizeName } from './names.ts';
 
 describe('sanitizeName', () => {
   it('strips control characters, collapses whitespace, and limits to 16 characters', () => {
@@ -39,5 +39,17 @@ describe('sanitizeName', () => {
   it('pads the default number to four digits', () => {
     expect(sanitizeName('', () => 0.0042)).toBe('Player-0042');
     expect(sanitizeName('', () => 0.9999)).toBe('Player-9999');
+  });
+});
+
+describe('cleanName', () => {
+  it('cleans like sanitizeName', () => {
+    expect(cleanName('  Iron\u0007   Wolf the Magnificent Engine ')).toBe('Iron Wolf the Ma');
+  });
+
+  it('returns an empty string rather than a made-up name', () => {
+    expect(cleanName('   ')).toBe('');
+    expect(cleanName('\u200b\u0007')).toBe('');
+    expect(cleanName(42)).toBe('');
   });
 });

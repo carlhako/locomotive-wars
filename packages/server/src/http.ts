@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import sirv from 'sirv';
+import type { HighScoreApiRow } from './highscores/service.ts';
 
 export interface Health {
   status: 'ok';
@@ -17,6 +18,8 @@ export interface HttpOptions {
   /** Directory holding the built client. */
   clientDir: string;
   health: () => Omit<Health, 'status'>;
+  /** The ranked high score table. */
+  highscores: () => HighScoreApiRow[];
 }
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
@@ -25,7 +28,7 @@ const NOT_BUILT =
   'The game client has not been built. Run `npm run build`, or use `npm run dev` and open the Vite URL.\n';
 
 /**
- * Serves `GET /healthz` and the built client. Files are looked up in a list taken when the
+ * Serves `GET /healthz`, `GET /api/highscores`, and the built client. Files are looked up in a list taken when the
  * server starts, so a request path can never reach outside the client directory.
  */
 export function createHttpHandler(opts: HttpOptions): Handler {
@@ -35,12 +38,16 @@ export function createHttpHandler(opts: HttpOptions): Handler {
 
   return (req, res) => {
     const path = (req.url ?? '/').split('?')[0];
-    if (path === '/healthz') {
+    if (path === '/healthz' || path === '/api/highscores') {
       if (req.method !== 'GET' && req.method !== 'HEAD') {
         res.writeHead(405, { Allow: 'GET, HEAD' }).end();
         return;
       }
-      const body = JSON.stringify({ status: 'ok', ...opts.health() } satisfies Health);
+      const body = JSON.stringify(
+        path === '/healthz'
+          ? ({ status: 'ok', ...opts.health() } satisfies Health)
+          : { entries: opts.highscores() },
+      );
       res.writeHead(200, {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store',

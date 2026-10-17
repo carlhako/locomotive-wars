@@ -1,4 +1,5 @@
 import type { ConnectionStatus, DisconnectReason } from '../net/connection.ts';
+import { fetchHighScores, highScoreRows, renderHighScoreRows } from './highscores.ts';
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -61,6 +62,21 @@ export function canReconnect(reason: DisconnectReason): boolean {
   return reason !== 'version' && reason !== 'malformed';
 }
 
+/**
+ * Fetches the all-time table and shows it on the join screen. A failed fetch leaves the last
+ * table (or the empty-table note) in place; the join screen works without it.
+ */
+export async function refreshJoinHighScores(
+  fetcher: typeof fetch = (...args) => fetch(...args),
+): Promise<void> {
+  const info = await fetchHighScores(fetcher);
+  if (!info) return;
+  const rows = highScoreRows(info);
+  renderHighScoreRows(byId('join-highscores-rows'), rows);
+  byId('join-highscores-empty').style.display = rows.length === 0 ? '' : 'none';
+  byId('join-highscores').classList.toggle('has-rows', rows.length > 0);
+}
+
 export interface JoinScreen {
   /** Called with the entered name when the player presses Play. */
   onPlay(handler: (name: string) => void): void;
@@ -106,6 +122,7 @@ export function bindJoinScreen(): JoinScreen {
     show: () => {
       root.style.display = 'flex';
       input.focus();
+      void refreshJoinHighScores();
     },
   };
 }

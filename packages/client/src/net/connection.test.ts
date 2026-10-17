@@ -424,6 +424,88 @@ describe('NetSession rounds', () => {
   });
 });
 
+describe('NetSession high scores', () => {
+  const table: ServerMessage = {
+    t: 'highscores',
+    entries: [
+      ['a-r1-0', 'CARL', 64],
+      ['a-r1-1', 'Ann', 40],
+    ],
+    highlightIds: ['a-r1-0'],
+  };
+
+  function intermission(session: NetSession): void {
+    online(session);
+    server.say({ t: 'round', phase: 'intermission', roundId: 1, endsAt: 21_000 });
+  }
+
+  it('shows the table and the offer only during the intermission', () => {
+    const session = makeSession();
+    online(session);
+    server.say({ t: 'round', phase: 'playing', roundId: 1, endsAt: 600_000 });
+    expect(session.highscores()).toBeNull();
+    server.say({ t: 'round', phase: 'intermission', roundId: 1, endsAt: 21_000 });
+    server.say({ t: 'hsEligible', token: 'tok', rank: 1, score: 64 });
+    server.say(table);
+    expect(session.highscores()).toEqual({
+      rows: [
+        { id: 'a-r1-0', name: 'CARL', score: 64 },
+        { id: 'a-r1-1', name: 'Ann', score: 40 },
+      ],
+      highlightIds: ['a-r1-0'],
+    });
+    expect(session.highScoreOffer()).toEqual({
+      rank: 1,
+      score: 64,
+      state: 'ready',
+      failure: undefined,
+    });
+    server.say({ t: 'round', phase: 'playing', roundId: 2, endsAt: 620_000 });
+    expect(session.highscores()).toBeNull();
+    expect(session.highScoreOffer()).toBeNull();
+  });
+
+  it('has no offer unless the server made one', () => {
+    const session = makeSession();
+    intermission(session);
+    server.say(table);
+    expect(session.highScoreOffer()).toBeNull();
+    session.submitHighScoreName('CARL');
+    expect(server.of('hsName')).toHaveLength(0);
+  });
+
+  it('sends the typed name with the token, never a score, and tracks the reply', () => {
+    const session = makeSession();
+    intermission(session);
+    server.say({ t: 'hsEligible', token: 'tok-1', rank: 2, score: 40 });
+    session.submitHighScoreName('CARL');
+    expect(server.of('hsName')).toEqual([{ t: 'hsName', token: 'tok-1', name: 'CARL' }]);
+    expect(session.highScoreOffer()?.state).toBe('saving');
+    // A second press while waiting sends nothing.
+    session.submitHighScoreName('CARL2');
+    expect(server.of('hsName')).toHaveLength(1);
+    server.say({ t: 'hsResult', ok: true });
+    expect(session.highScoreOffer()?.state).toBe('saved');
+    session.submitHighScoreName('CARL3');
+    expect(server.of('hsName')).toHaveLength(1);
+  });
+
+  it('allows another try after a server error, but not after a refusal', () => {
+    const session = makeSession();
+    intermission(session);
+    server.say({ t: 'hsEligible', token: 'tok-1', rank: 2, score: 40 });
+    session.submitHighScoreName('A');
+    server.say({ t: 'hsResult', ok: false, reason: 'error' });
+    expect(session.highScoreOffer()).toMatchObject({ state: 'failed', failure: 'error' });
+    session.submitHighScoreName('B');
+    expect(server.of('hsName')).toHaveLength(2);
+    server.say({ t: 'hsResult', ok: false, reason: 'expired' });
+    expect(session.highScoreOffer()).toMatchObject({ state: 'failed', failure: 'expired' });
+    session.submitHighScoreName('C');
+    expect(server.of('hsName')).toHaveLength(2);
+  });
+});
+
 describe('NetSession idle warning and kick', () => {
   it('counts down from the warning and clears on idleClear', () => {
     const session = makeSession();

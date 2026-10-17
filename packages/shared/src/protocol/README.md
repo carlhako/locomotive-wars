@@ -10,7 +10,7 @@ numbers to keep snapshots small. Binary encoding and delta compression are a lat
 
 ## Versioning
 
-`PROTOCOL_VERSION` (currently `3`) is bumped on any incompatible change to a message. The first
+`PROTOCOL_VERSION` (currently `4`) is bumped on any incompatible change to a message. The first
 message a client sends is `hello` carrying its version; a server that does not speak it replies
 `reject` with reason `version` and closes the socket. The client then tells the player to reload.
 
@@ -35,29 +35,33 @@ above are the defaults, and `welcome` carries the ones in force. The rest are co
 
 ## Client to server
 
-| `t`     | Fields                                                                | Notes                                                                                          |
-| ------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `hello` | `v` protocol version, `name`                                          | Must be first. The server sanitises the name (`sanitizeName`) and spawns the train.            |
-| `in`    | `s` sequence, `tr` turn, `b` boost 0/1, `br` brake 0/1, `a` aim (rad) | Sent on change and every 100 ms. `tr` is clamped to [-1, 1]; non-finite numbers are malformed. |
-| `ping`  | `c` client time (ms)                                                  | Echoed in `pong`.                                                                              |
+| `t`      | Fields                                                                | Notes                                                                                                |
+| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `hello`  | `v` protocol version, `name`                                          | Must be first. The server sanitises the name (`sanitizeName`) and spawns the train.                  |
+| `in`     | `s` sequence, `tr` turn, `b` boost 0/1, `br` brake 0/1, `a` aim (rad) | Sent on change and every 100 ms. `tr` is clamped to [-1, 1]; non-finite numbers are malformed.       |
+| `ping`   | `c` client time (ms)                                                  | Echoed in `pong`.                                                                                    |
+| `hsName` | `token`, `name`                                                       | Names the player's own high score entry. The token comes from `hsEligible`; there is no score field. |
 
 A client never sends a position. Unknown fields are dropped when a message is decoded.
 
 ## Server to client
 
-| `t`         | Fields                                                                                                                             | When                                                                                                                                          |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `welcome`   | `v`, `id` (the session's train), `tickRate`, `snapRate`, `mapSize`, `interpMs`, `roundLengthSec`, `intermissionSec`, `idleKickSec` | Once, in reply to a good `hello`. `id` is promised now; the train appears when a round is playing.                                            |
-| `reject`    | `reason`: `version`, `full`, or `malformed`; for `full` also `humans`, `max`                                                       | Instead of `welcome`; the socket then closes.                                                                                                 |
-| `round`     | `phase` (`playing` or `intermission`), `roundId`, `endsAt` (server ms)                                                             | On join and at every phase change.                                                                                                            |
-| `roundEnd`  | `roundId`, `standings: [[id, name, isBot, best, kills]]`, `winnerId`, `nextRoundAt`                                                | When a round ends, and to a player who joins during the intermission.                                                                         |
-| `idleWarn`  | `secondsLeft`                                                                                                                      | The session has been idle until 10 s before the kick.                                                                                         |
-| `idleClear` | none                                                                                                                               | The session did something; the warning is withdrawn.                                                                                          |
-| `kicked`    | `reason`: `idle`                                                                                                                   | Just before the server closes the socket with code 4000.                                                                                      |
-| `meta`      | `trains: [{id, name, color, ctl, kinds}]`, `gone: [id]`                                                                            | When a train is first in view, its carriage kinds change, or it leaves view. Always sent before the `snap` that needs it.                     |
-| `snap`      | see below                                                                                                                          | At the snapshot rate.                                                                                                                         |
-| `ov`        | `h: [[id, x, y, color, name]]`, `lb: [[id, name, best, now, isBot]]`, `rk`                                                         | At the overview rate: every living train for the minimap and kill feed, the top-10 leaderboard, and the session's own rank (`rk`, 0 if none). |
-| `pong`      | `c` (echoed), `st` server time (ms)                                                                                                | In reply to `ping`.                                                                                                                           |
+| `t`          | Fields                                                                                                                             | When                                                                                                                                          |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `welcome`    | `v`, `id` (the session's train), `tickRate`, `snapRate`, `mapSize`, `interpMs`, `roundLengthSec`, `intermissionSec`, `idleKickSec` | Once, in reply to a good `hello`. `id` is promised now; the train appears when a round is playing.                                            |
+| `reject`     | `reason`: `version`, `full`, or `malformed`; for `full` also `humans`, `max`                                                       | Instead of `welcome`; the socket then closes.                                                                                                 |
+| `round`      | `phase` (`playing` or `intermission`), `roundId`, `endsAt` (server ms)                                                             | On join and at every phase change.                                                                                                            |
+| `roundEnd`   | `roundId`, `standings: [[id, name, isBot, best, kills]]`, `winnerId`, `nextRoundAt`                                                | When a round ends, and to a player who joins during the intermission.                                                                         |
+| `idleWarn`   | `secondsLeft`                                                                                                                      | The session has been idle until 10 s before the kick.                                                                                         |
+| `idleClear`  | none                                                                                                                               | The session did something; the warning is withdrawn.                                                                                          |
+| `kicked`     | `reason`: `idle`                                                                                                                   | Just before the server closes the socket with code 4000.                                                                                      |
+| `meta`       | `trains: [{id, name, color, ctl, kinds}]`, `gone: [id]`                                                                            | When a train is first in view, its carriage kinds change, or it leaves view. Always sent before the `snap` that needs it.                     |
+| `snap`       | see below                                                                                                                          | At the snapshot rate.                                                                                                                         |
+| `ov`         | `h: [[id, x, y, color, name]]`, `lb: [[id, name, best, now, isBot]]`, `rk`                                                         | At the overview rate: every living train for the minimap and kill feed, the top-10 leaderboard, and the session's own rank (`rk`, 0 if none). |
+| `pong`       | `c` (echoed), `st` server time (ms)                                                                                                | In reply to `ping`.                                                                                                                           |
+| `hsEligible` | `token`, `rank`, `score`                                                                                                           | At round end, to a player whose round best earned a place in the all-time table. The token is single-use, valid until the next round starts.  |
+| `hsResult`   | `ok`, `reason?`: `invalid`, `used`, `expired`, or `error`                                                                          | In reply to `hsName`.                                                                                                                         |
+| `highscores` | `entries: [[id, name, score]]`, `highlightIds`                                                                                     | When a round's results are added and whenever an entry is renamed, and to a player who joins during the intermission.                         |
 
 ### `snap`
 

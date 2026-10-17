@@ -44,20 +44,22 @@ such as `maxPlayer`) only prints a warning and is ignored.
 
 <!-- config-keys:start -->
 
-| Key               | Default | Allowed                     | Meaning                                                            |
-| ----------------- | ------- | --------------------------- | ------------------------------------------------------------------ |
-| `port`            | `8080`  | 0 to 65535                  | TCP port to listen on                                              |
-| `maxPlayers`      | `16`    | 1 to 100                    | Most human players connected at once; more are refused as full     |
-| `roundLengthSec`  | `600`   | 30 to 7200                  | Length of a round                                                  |
-| `intermissionSec` | `20`    | 5 to 300                    | Pause between rounds, showing the standings                        |
-| `idleKickSec`     | `60`    | `0` (off), or 20 to 3600    | Kick a player who stops steering this long (warned 10 s before)    |
-| `bots.fillTo`     | `12`    | 0 to 100                    | Bots fill the world up to this many trains in all, humans included |
-| `bots.min`        | `0`     | 0 to `bots.max`             | Fewest bots, however many humans are connected                     |
-| `bots.max`        | `10`    | 0 to 100                    | Most bots                                                          |
-| `maxCarriages`    | `150`   | 10 to 500                   | Longest a train can grow, locomotive included                      |
-| `tickRate`        | `30`    | 10 to 60                    | Simulation steps per second                                        |
-| `snapshotRate`    | `15`    | 1 to `tickRate`, divides it | Snapshots sent per client per second                               |
-| `viewRadius`      | `1600`  | 500 to 5000                 | How far from its train a client sees, in world units               |
+| Key               | Default                | Allowed                     | Meaning                                                                      |
+| ----------------- | ---------------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| `port`            | `8080`                 | 0 to 65535                  | TCP port to listen on                                                        |
+| `maxPlayers`      | `16`                   | 1 to 100                    | Most human players connected at once; more are refused as full               |
+| `roundLengthSec`  | `600`                  | 30 to 7200                  | Length of a round                                                            |
+| `intermissionSec` | `20`                   | 5 to 300                    | Pause between rounds, showing the standings                                  |
+| `idleKickSec`     | `60`                   | `0` (off), or 20 to 3600    | Kick a player who stops steering this long (warned 10 s before)              |
+| `bots.fillTo`     | `12`                   | 0 to 100                    | Bots fill the world up to this many trains in all, humans included           |
+| `bots.min`        | `0`                    | 0 to `bots.max`             | Fewest bots, however many humans are connected                               |
+| `bots.max`        | `10`                   | 0 to 100                    | Most bots                                                                    |
+| `highscores.size` | `10`                   | 1 to 100                    | Entries kept in the all-time high score table                                |
+| `highscores.file` | `data/highscores.json` | any path                    | Where the table is stored; a relative path is read from the config directory |
+| `maxCarriages`    | `150`                  | 10 to 500                   | Longest a train can grow, locomotive included                                |
+| `tickRate`        | `30`                   | 10 to 60                    | Simulation steps per second                                                  |
+| `snapshotRate`    | `15`                   | 1 to `tickRate`, divides it | Snapshots sent per client per second                                         |
+| `viewRadius`      | `1600`                 | 500 to 5000                 | How far from its train a client sees, in world units                         |
 
 <!-- config-keys:end -->
 
@@ -71,6 +73,31 @@ A round lasts `roundLengthSec`, then an intermission of `intermissionSec` shows 
 and the winner (the player whose train reached the greatest length during the round; the player who
 got there first wins a tie). The next round resets the world and every train. With no human
 connected the world is paused, and the next player to join starts a fresh round.
+
+### High scores
+
+The server keeps an all-time table of the best round results by human players, ranked by round best
+(the longest train reached in a round; the earlier result wins a tie). Bots never enter it. When a
+round ends, each connected human whose round best beats the lowest entry (or fills a free slot) is
+added at once under their join name, and during the intermission they can type a name for the
+entry. The table is shown on the join screen and in the intermission overlay, and
+`GET /api/highscores` returns it as JSON.
+
+The table lives in the JSON file named by `highscores.file` (default `data/highscores.json`; a
+relative path is read from the directory you start the server in, like `config.json`). The server
+creates the directory, reads the file at startup, and replaces it atomically after each change, so
+a crash never leaves a half-written file.
+
+- **Edit an entry** (to remove an offensive name, say): stop the server, change the `name` in the
+  file, and start it again. Keep the file valid JSON; entries beyond `highscores.size` are dropped
+  at startup.
+- **Reset the table:** stop the server, delete the file (`rm data/highscores.json`), and start it
+  again. The table starts empty.
+- **A damaged file:** if the file is not valid or fails its checks at startup, the server logs an
+  error, renames it to `highscores.json.corrupt-<timestamp>` next to the original, and starts with
+  an empty table. Fix or discard the renamed file by hand.
+
+Back the file up like any other data; it is the only copy of the table.
 
 ## Scripts
 

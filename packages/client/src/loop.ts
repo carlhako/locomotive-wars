@@ -83,6 +83,7 @@ export class Game {
     if (!mctx) throw new Error('2D canvas context unavailable');
     this.minimapCtx = mctx;
 
+    this.roundOverlay.onSubmitName((name) => source.submitHighScoreName?.(name));
     this.particles = new ParticleSystem(MAX_PARTICLES, source.mapSize);
     this.killFeedView = new KillFeedView(el('killfeed'), this.killFeed);
     this.banner = new Banner(el('banner'), el('combo'));
@@ -197,7 +198,10 @@ export class Game {
     this.leaderboard.render(
       leaderboardModel(this.source.board?.() ?? boardFromView(view), localScoreOf(view)),
     );
-    this.roundOverlay.update(round, this.source.roundResult?.() ?? null, view.localId);
+    this.roundOverlay.update(round, this.source.roundResult?.() ?? null, view.localId, {
+      highscores: this.source.highscores?.() ?? null,
+      offer: this.source.highScoreOffer?.() ?? null,
+    });
     this.killFeedView.render();
   }
 

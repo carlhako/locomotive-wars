@@ -33,6 +33,17 @@ export function actionForKey(key: string): KeyAction | null {
   }
 }
 
+/** True when keys typed at `target` belong to a text field, not to the game. */
+export function isTypingTarget(
+  target: { tagName?: string; isContentEditable?: boolean } | null,
+): boolean {
+  if (!target) return false;
+  const tag = target.tagName?.toUpperCase();
+  return (
+    tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable === true
+  );
+}
+
 /** World-space aim angle for a mouse at (mouseX, mouseY) with the head at (headX, headY). */
 export function aimAngle(mouseX: number, mouseY: number, headX: number, headY: number): number {
   return Math.atan2(mouseY - headY, mouseX - headX);
@@ -110,6 +121,8 @@ export class InputState {
   /** Wires the window's keyboard and mouse events. Returns a function that removes them. */
   attach(target: Window, onGesture?: () => void): () => void {
     const onKeyDown = (e: KeyboardEvent): void => {
+      // A name box (the high score entry) gets its keys: A, D, S, and Space must type.
+      if (isTypingTarget(e.target as Element | null)) return;
       if (this.keyDown(e.key)) e.preventDefault();
       onGesture?.();
     };

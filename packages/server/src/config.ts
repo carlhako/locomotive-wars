@@ -23,6 +23,11 @@ const botsSchema = z.object(botsShape).superRefine((bots, ctx) => {
   }
 });
 
+const highscoresShape = {
+  size: int(1, 100).default(10),
+  file: z.string().min(1).default('data/highscores.json'),
+};
+
 const idleKickSchema = z
   .number()
   .int()
@@ -37,6 +42,7 @@ const shape = {
   intermissionSec: int(5, 300).default(20),
   idleKickSec: idleKickSchema.default(60),
   bots: botsSchema.prefault({}),
+  highscores: z.object(highscoresShape).prefault({}),
   maxCarriages: int(10, 500).default(150),
   tickRate: int(10, 60).default(30),
   snapshotRate: int(1, 60).default(15),
@@ -57,14 +63,18 @@ export type ServerConfig = z.infer<typeof configSchema>;
 
 /** Every key the file may contain, as dotted paths (`bots.min`). */
 export const CONFIG_KEYS: readonly string[] = [
-  ...Object.keys(shape).filter((k) => k !== 'bots'),
+  ...Object.keys(shape).filter((k) => k !== 'bots' && k !== 'highscores'),
   ...Object.keys(botsShape).map((k) => `bots.${k}`),
+  ...Object.keys(highscoresShape).map((k) => `highscores.${k}`),
 ];
 
-function knownKeys(): { top: Set<string>; bots: Set<string> } {
+function knownKeys(): { top: Set<string>; groups: Record<string, Set<string>> } {
   return {
     top: new Set(Object.keys(shape)),
-    bots: new Set(Object.keys(botsShape)),
+    groups: {
+      bots: new Set(Object.keys(botsShape)),
+      highscores: new Set(Object.keys(highscoresShape)),
+    },
   };
 }
 
@@ -79,9 +89,11 @@ export function unknownKeys(raw: Record<string, unknown>): string[] {
   for (const key of Object.keys(raw)) {
     if (!known.top.has(key)) out.push(key);
   }
-  if (isRecord(raw.bots)) {
-    for (const key of Object.keys(raw.bots)) {
-      if (!known.bots.has(key)) out.push(`bots.${key}`);
+  for (const [group, keys] of Object.entries(known.groups)) {
+    const value = raw[group];
+    if (!isRecord(value)) continue;
+    for (const key of Object.keys(value)) {
+      if (!keys.has(key)) out.push(`${group}.${key}`);
     }
   }
   return out;

@@ -41,6 +41,32 @@ export interface RoundResultInfo {
   standings: StandingInfo[];
 }
 
+export interface HighScoreRowInfo {
+  id: string;
+  name: string;
+  score: number;
+}
+
+/** The all-time table, best first, with the entries this round added. */
+export interface HighScoresInfo {
+  rows: HighScoreRowInfo[];
+  highlightIds: string[];
+}
+
+/** Why the server refused a high score name. */
+export type HighScoreFailure = 'invalid' | 'used' | 'expired' | 'error';
+
+/** The player's own result earned a place in the table; they may name the entry. */
+export interface HighScoreOffer {
+  /** 1-based rank in the table. */
+  rank: number;
+  /** Round best: carriages behind the locomotive at the longest. */
+  score: number;
+  /** `ready` to submit, `saving` while waiting for the server, `saved`, or `failed` with a reason. */
+  state: 'ready' | 'saving' | 'saved' | 'failed';
+  failure?: HighScoreFailure;
+}
+
 /**
  * Where the client's world comes from. Offline play steps a local simulation; the online client
  * (change 04) will implement the same interface over network snapshots. Everything downstream
@@ -72,6 +98,12 @@ export interface GameSource {
   board?(): Board | null;
   /** The standings of the round that just ended, while the intermission lasts. */
   roundResult?(): RoundResultInfo | null;
+  /** The all-time high score table, while the intermission lasts. */
+  highscores?(): HighScoresInfo | null;
+  /** The player's invitation to name a new high score entry, while the intermission lasts. */
+  highScoreOffer?(): HighScoreOffer | null;
+  /** Sends the name for the offered entry. Does nothing without an offer that can be answered. */
+  submitHighScoreName?(name: string): void;
   /** Whole seconds until the player is kicked for inactivity, or null when not warned. */
   idleWarning?(): number | null;
 }

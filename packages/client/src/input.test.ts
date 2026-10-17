@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionForKey, aimAngle, InputState } from './input.ts';
+import { actionForKey, aimAngle, InputState, isTypingTarget } from './input.ts';
 
 describe('key mapping', () => {
   it('maps A/D and the left/right arrows to turning', () => {
@@ -93,5 +93,19 @@ describe('aimAngle', () => {
     expect(aimAngle(0, 10, 0, 0)).toBeCloseTo(Math.PI / 2);
     expect(aimAngle(-10, 0, 0, 0)).toBeCloseTo(Math.PI);
     expect(aimAngle(0, -10, 0, 0)).toBeCloseTo(-Math.PI / 2);
+  });
+});
+
+describe('isTypingTarget', () => {
+  it('treats text fields as typing, so game keys are left to them', () => {
+    expect(isTypingTarget({ tagName: 'INPUT' })).toBe(true);
+    expect(isTypingTarget({ tagName: 'textarea' })).toBe(true);
+    expect(isTypingTarget({ tagName: 'DIV', isContentEditable: true })).toBe(true);
+  });
+
+  it('does not treat the page or canvas as typing', () => {
+    expect(isTypingTarget({ tagName: 'CANVAS' })).toBe(false);
+    expect(isTypingTarget({ tagName: 'BODY' })).toBe(false);
+    expect(isTypingTarget(null)).toBe(false);
   });
 });

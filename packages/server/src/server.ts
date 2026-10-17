@@ -18,6 +18,10 @@ import type { RawData, WebSocket } from 'ws';
 import { IdleTracker, isFull } from './admission.ts';
 import { defaultConfig, IDLE_WARN_SEC } from './config.ts';
 import type { ServerConfig } from './config.ts';
+import { HighScoreService } from './highscores/service.ts';
+import type { RoundCandidate } from './highscores/service.ts';
+import { createMemoryStore } from './highscores/store.ts';
+import type { HighScoreStore } from './highscores/store.ts';
 import { createHttpHandler } from './http.ts';
 import { selectEvents, selectVisible } from './interest.ts';
 import type { Visible } from './interest.ts';
@@ -47,7 +51,9 @@ export interface GameServerOptions {
   /** Compress WebSocket messages over 1 KB (`permessage-deflate`). Default off. */
   compress?: boolean;
   log?: (message: string) => void;
-  /** Called once when a round ends, with its final standings (change 07 stores high scores here). */
+  /** Where the high score table is kept. Default: in memory only, lost when the server stops. */
+  highscoreStore?: HighScoreStore;
+  /** Called once when a round ends, with its final standings. */
   onRoundEnd?: (result: RoundResult) => void;
 }
 
@@ -70,6 +76,7 @@ export class GameServer {
   private readonly wss: WebSocketServer;
   private readonly sessions = new Set<Session>();
   private readonly population: BotPopulation;
+  private readonly highscores: HighScoreService<Session>;
   private readonly log: (message: string) => void;
   private readonly snapEvery: number;
   private readonly overviewEvery: number;
@@ -100,6 +107,15 @@ export class GameServer {
     this.idleKickTicks = config.idleKickSec * rate;
     this.rounds = new RoundClock(config.roundLengthSec * rate, config.intermissionSec * rate);
     this.population = new BotPopulation(this.world, config.bots, rate);
+    this.highscores = new HighScoreService<Session>({
+      store: opts.highscoreStore ?? createMemoryStore(),
+      size: config.highscores.size,
+      log: this.log,
+      host: {
+        send: (session, msg) => this.send(session.ws, msg),
+        broadcast: (msg) => this.broadcast(msg),
+      },
+    });
 
     this.loop = new FixedStepLoop({
       tickRate: rate,
@@ -117,6 +133,7 @@ export class GameServer {
           phase: this.rounds.phase,
           round: this.rounds.roundId,
         }),
+        highscores: () => this.highscores.apiRows(),
       }),
     );
     this.wss = new WebSocketServer({
@@ -141,8 +158,9 @@ export class GameServer {
     return n;
   }
 
-  /** Starts listening and stepping the world. Resolves with the port in use. */
-  listen(): Promise<number> {
+  /** Loads the high scores, then starts listening and stepping the world. Resolves with the port in use. */
+  async listen(): Promise<number> {
+    await this.highscores.load();
     return new Promise((resolve, reject) => {
       this.http.once('error', reject);
       this.http.listen(this.config.port, this.opts.host, () => {
@@ -153,10 +171,11 @@ export class GameServer {
     });
   }
 
-  /** Stops the loop, disconnects every client, and closes the listener. */
-  close(): Promise<void> {
+  /** Stops the loop, disconnects every client, waits for any high score save, and closes the listener. */
+  async close(): Promise<void> {
     this.loop.stop();
     for (const s of this.sessions) s.ws.terminate();
+    await this.highscores.settled();
     return new Promise((resolve) => {
       this.wss.close(() => {
         this.http.close(() => resolve());
@@ -257,6 +276,16 @@ export class GameServer {
         this.send(session.ws, { t: 'pong', c: msg.c, st: this.serverTimeMs() });
         return;
       }
+      case 'hsName': {
+        if (!session.joined) {
+          this.malformed(session);
+          return;
+        }
+        void this.highscores.rename(session, msg.token, msg.name).then((reply) => {
+          this.send(session.ws, reply);
+        });
+        return;
+      }
     }
   }
 
@@ -287,6 +316,7 @@ export class GameServer {
       this.send(session.ws, this.roundMessage());
       if (this.rounds.phase === 'intermission' && this.lastRoundEnd) {
         this.sendText(session.ws, this.lastRoundEnd);
+        this.send(session.ws, this.highscores.message());
       }
     }
     this.log(`${name} joined as train ${session.reservedId} (${this.humans} human(s))`);
@@ -331,6 +361,7 @@ export class GameServer {
   private startRound(): void {
     this.population.trimExcess(this.humans);
     this.rounds.start();
+    this.highscores.roundStarted();
     this.world.resetForRound(roundSeed(this.world.options.seed, this.rounds.roundId));
     this.events = [];
     this.lastRoundEnd = null;
@@ -366,6 +397,21 @@ export class GameServer {
     } catch (e) {
       this.log(`onRoundEnd failed: ${e instanceof Error ? e.message : String(e)}`);
     }
+    this.highscores.roundEnded(result.roundId, this.highScoreCandidates(result)).catch((e) => {
+      this.log(`high scores failed: ${e instanceof Error ? e.message : String(e)}`);
+    });
+  }
+
+  /** The connected humans in the standings, best first. Bots never take a place. */
+  private highScoreCandidates(result: RoundResult): RoundCandidate<Session>[] {
+    const byTrain = new Map<number, Session>();
+    for (const s of this.sessions) if (s.joined && s.trainId !== null) byTrain.set(s.trainId, s);
+    const out: RoundCandidate<Session>[] = [];
+    result.standings.forEach((standing, place) => {
+      const session = standing.bot ? undefined : byTrain.get(standing.id);
+      if (session) out.push({ session, name: standing.name, score: standing.roundBest, place });
+    });
+    return out;
   }
 
   // ===== The tick =====

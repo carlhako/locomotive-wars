@@ -28,6 +28,7 @@ describe('defaults', () => {
       intermissionSec: 20,
       idleKickSec: 60,
       bots: { fillTo: 12, min: 0, max: 10 },
+      highscores: { size: 10, file: 'data/highscores.json' },
       maxCarriages: 150,
       tickRate: 30,
       snapshotRate: 15,
@@ -83,6 +84,22 @@ describe('validation', () => {
     expect(parseConfig({ idleKickSec: 20 }).ok).toBe(true);
   });
 
+  it('limits highscores.size to 1..100 and needs a file path', () => {
+    expect(parseConfig({ highscores: { size: 1 } }).ok).toBe(true);
+    expect(parseConfig({ highscores: { size: 100 } }).ok).toBe(true);
+    for (const bad of [{ size: 0 }, { size: 101 }, { size: 2.5 }, { file: '' }, { file: 7 }]) {
+      const r = parseConfig({ highscores: bad });
+      expect(r.ok, JSON.stringify(bad)).toBe(false);
+      if (r.ok) continue;
+      expect(r.errors[0]).toMatch(/^highscores\.(size|file):/);
+    }
+  });
+
+  it('fills a missing highscores key', () => {
+    const r = parseConfig({ highscores: { size: 5 } });
+    expect(r.ok && r.config.highscores).toEqual({ size: 5, file: 'data/highscores.json' });
+  });
+
   it('requires bots.min <= bots.max', () => {
     const r = parseConfig({ bots: { min: 6, max: 5 } });
     expect(r.ok).toBe(false);
@@ -114,6 +131,8 @@ describe('unknown keys', () => {
   it('warns about nested keys', () => {
     const r = parseConfig({ bots: { fil: 3 } });
     expect(r.warnings).toEqual(['unknown config key "bots.fil" (ignored)']);
+    const h = parseConfig({ highscores: { sizee: 3 } });
+    expect(h.ok && h.warnings).toEqual(['unknown config key "highscores.sizee" (ignored)']);
   });
 });
 

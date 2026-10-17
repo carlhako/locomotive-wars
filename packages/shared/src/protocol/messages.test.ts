@@ -54,6 +54,7 @@ const clientMessages: ClientMessage[] = [
   { t: 'hello', v: PROTOCOL_VERSION, name: 'Casey' },
   { t: 'in', s: 5, tr: -1, b: 1, br: 0, a: 2.5 },
   { t: 'ping', c: 123456.5 },
+  { t: 'hsName', token: '3f1c9a52-8d1e-4a6b-9a64-2b7d3e0c1f11', name: 'CARL' },
 ];
 
 const serverMessages: ServerMessage[] = [
@@ -105,6 +106,18 @@ const serverMessages: ServerMessage[] = [
   { t: 'idleWarn', secondsLeft: 10 },
   { t: 'idleClear' },
   { t: 'kicked', reason: 'idle' },
+  { t: 'hsEligible', token: '3f1c9a52-8d1e-4a6b-9a64-2b7d3e0c1f11', rank: 3, score: 64 },
+  { t: 'hsResult', ok: true },
+  { t: 'hsResult', ok: false, reason: 'used' },
+  {
+    t: 'highscores',
+    entries: [
+      ['a-r1-0', 'CARL', 64],
+      ['a-r1-1', 'Ann', 40],
+    ],
+    highlightIds: ['a-r1-0'],
+  },
+  { t: 'highscores', entries: [], highlightIds: [] },
 ];
 
 describe('message round trips', () => {
@@ -138,6 +151,19 @@ describe('decodeClientMessage', () => {
     ['input with an infinite turn', '{"t":"in","s":1,"tr":-1e999,"b":0,"br":0,"a":0}'],
     ['input with a fractional sequence', '{"t":"in","s":1.5,"tr":0,"b":0,"br":0,"a":0}'],
     ['ping with a string time', '{"t":"ping","c":"now"}'],
+    ['hsName without a token', '{"t":"hsName","name":"CARL"}'],
+    ['hsName with an empty token', '{"t":"hsName","token":"","name":"CARL"}'],
+    [
+      'hsName with an enormous token',
+      JSON.stringify({ t: 'hsName', token: 'x'.repeat(65), name: 'a' }),
+    ],
+    ['hsName with a numeric token', '{"t":"hsName","token":7,"name":"CARL"}'],
+    ['hsName without a name', '{"t":"hsName","token":"abc"}'],
+    [
+      'hsName with an enormous name',
+      JSON.stringify({ t: 'hsName', token: 'a', name: 'x'.repeat(5000) }),
+    ],
+    ['hsName carrying only a score', '{"t":"hsName","score":9999}'],
   ])('rejects %s', (_name, raw) => {
     expect(decodeClientMessage(raw)).toBeNull();
   });
@@ -193,6 +219,12 @@ describe('decodeServerMessage', () => {
       '{"t":"roundEnd","roundId":1,"standings":[[1,"a",2,3,4]],"winnerId":1,"nextRoundAt":0}',
     ],
     ['an idleWarn without a count', '{"t":"idleWarn"}'],
+    ['an hsEligible without a token', '{"t":"hsEligible","rank":1,"score":5}'],
+    ['an hsEligible with a fractional rank', '{"t":"hsEligible","token":"a","rank":1.5,"score":5}'],
+    ['an hsResult without ok', '{"t":"hsResult"}'],
+    ['a highscores without entries', '{"t":"highscores","highlightIds":[]}'],
+    ['a highscores with a bad row', '{"t":"highscores","entries":[["a","b"]],"highlightIds":[]}'],
+    ['a highscores with a bad highlight', '{"t":"highscores","entries":[],"highlightIds":[3]}'],
     ['a kicked with another reason', '{"t":"kicked","reason":"cheating"}'],
     [
       'a meta with a bad controller',

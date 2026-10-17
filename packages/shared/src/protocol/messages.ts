@@ -8,7 +8,7 @@ import type {
 } from '../sim/types.ts';
 
 /** Bumped on any incompatible change to the message shapes. */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 /**
  * The wire protocol, JSON for the beta. Keys are short and entity lists are arrays of numbers to
@@ -89,7 +89,17 @@ export interface PingMsg {
   c: number;
 }
 
-export type ClientMessage = HelloMsg | InputMsg | PingMsg;
+/** Longest `hsName` token accepted. The server issues 36-character UUIDs. */
+export const MAX_HS_TOKEN = 64;
+
+/** Names the player's own high score entry. Only ever carries a token the server issued. */
+export interface HsNameMsg {
+  t: 'hsName';
+  token: string;
+  name: string;
+}
+
+export type ClientMessage = HelloMsg | InputMsg | PingMsg | HsNameMsg;
 
 // ===== Server to client =====
 
@@ -140,6 +150,39 @@ export interface RoundEndMsg {
   winnerId: number | null;
   /** Server time in ms at which the next round starts. */
   nextRoundAt: number;
+}
+
+/** Your round result earned a place in the all-time table; `token` lets you name the entry. */
+export interface HsEligibleMsg {
+  t: 'hsEligible';
+  token: string;
+  /** 1-based rank in the table. */
+  rank: number;
+  score: number;
+}
+
+/** Why an `hsName` was refused. `invalid` covers an unknown token or another session's. */
+export type HsFailReason = 'invalid' | 'used' | 'expired' | 'error';
+const HS_FAIL_REASONS: readonly HsFailReason[] = ['invalid', 'used', 'expired', 'error'];
+
+/** The reply to an `hsName`. */
+export interface HsResultMsg {
+  t: 'hsResult';
+  ok: boolean;
+  reason?: HsFailReason;
+}
+
+/** `[id, name, score]`, in rank order. */
+export type HighScoreRow = [string, string, number];
+
+/**
+ * The all-time table, broadcast when a round's results are added and when a name changes, and
+ * sent to a player who joins during the intermission. `highlightIds` are this round's new entries.
+ */
+export interface HighScoresMsg {
+  t: 'highscores';
+  entries: HighScoreRow[];
+  highlightIds: string[];
 }
 
 /** The server is about to kick the session for inactivity. */
@@ -281,7 +324,10 @@ export type ServerMessage =
   | RoundEndMsg
   | IdleWarnMsg
   | IdleClearMsg
-  | KickedMsg;
+  | KickedMsg
+  | HsEligibleMsg
+  | HsResultMsg
+  | HighScoresMsg;
 
 // ===== Encoding =====
 
@@ -342,6 +388,17 @@ export function decodeClientMessage(raw: string): ClientMessage | null {
     case 'ping':
       if (isNum(m.c)) return { t: 'ping', c: m.c };
       return null;
+    case 'hsName':
+      if (
+        typeof m.token === 'string' &&
+        m.token.length > 0 &&
+        m.token.length <= MAX_HS_TOKEN &&
+        typeof m.name === 'string' &&
+        m.name.length <= MAX_HELLO_NAME
+      ) {
+        return { t: 'hsName', token: m.token, name: m.name };
+      }
+      return null;
     default:
       return null;
   }
@@ -389,6 +446,10 @@ function isStandingRow(r: unknown): r is StandingRow {
     isNum(r[3]) &&
     isNum(r[4])
   );
+}
+
+function isHighScoreRow(r: unknown): r is HighScoreRow {
+  return Array.isArray(r) && typeof r[0] === 'string' && typeof r[1] === 'string' && isNum(r[2]);
 }
 
 function isTrainMeta(v: unknown): v is TrainMeta {
@@ -510,6 +571,27 @@ export function decodeServerMessage(raw: string): ServerMessage | null {
       return null;
     case 'pong':
       if (isNum(m.c) && isNum(m.st)) return { t: 'pong', c: m.c, st: m.st };
+      return null;
+    case 'hsEligible':
+      if (typeof m.token === 'string' && isInt(m.rank) && isNum(m.score)) {
+        return { t: 'hsEligible', token: m.token, rank: m.rank, score: m.score };
+      }
+      return null;
+    case 'hsResult':
+      if (typeof m.ok === 'boolean') {
+        const reason = HS_FAIL_REASONS.find((r) => r === m.reason);
+        return reason ? { t: 'hsResult', ok: m.ok, reason } : { t: 'hsResult', ok: m.ok };
+      }
+      return null;
+    case 'highscores':
+      if (
+        Array.isArray(m.entries) &&
+        m.entries.every(isHighScoreRow) &&
+        Array.isArray(m.highlightIds) &&
+        m.highlightIds.every((id) => typeof id === 'string')
+      ) {
+        return { t: 'highscores', entries: m.entries, highlightIds: m.highlightIds };
+      }
       return null;
     default:
       return null;

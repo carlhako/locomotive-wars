@@ -7,6 +7,7 @@ import {
   SNAPSHOT_TIMEOUT_MS,
 } from '@lw/shared';
 import type {
+  HighScoresMsg,
   LeaderRow,
   OverviewRow,
   RejectReason,
@@ -20,7 +21,15 @@ import type {
   WelcomeMsg,
   WorldView,
 } from '@lw/shared';
-import type { Board, GameSource, RoundResultInfo, RoundStatus } from '../source.ts';
+import type {
+  Board,
+  GameSource,
+  HighScoreFailure,
+  HighScoreOffer,
+  HighScoresInfo,
+  RoundResultInfo,
+  RoundStatus,
+} from '../source.ts';
 import { SnapshotBuffer } from './buffer.ts';
 import { ClockSync } from './clock.ts';
 import { LocalTrain } from './localTrain.ts';
@@ -95,6 +104,14 @@ export class NetSession implements GameSource {
   private overview: OverviewRow[] = [];
   private roundMsg: RoundMsg | null = null;
   private roundEndMsg: RoundEndMsg | null = null;
+  private scores: HighScoresMsg | null = null;
+  private hs: {
+    token: string;
+    rank: number;
+    score: number;
+    state: HighScoreOffer['state'];
+    failure?: HighScoreFailure;
+  } | null = null;
   private leaders: LeaderRow[] = [];
   private rank = 0;
   /** Client time at which the inactivity kick lands, while a warning stands. */
@@ -194,6 +211,33 @@ export class NetSession implements GameSource {
     };
   }
 
+  highscores(): HighScoresInfo | null {
+    const s = this.scores;
+    if (!s || this.roundMsg?.phase !== 'intermission') return null;
+    return {
+      rows: s.entries.map(([id, name, score]) => ({ id, name, score })),
+      highlightIds: s.highlightIds,
+    };
+  }
+
+  highScoreOffer(): HighScoreOffer | null {
+    const h = this.hs;
+    if (!h || this.roundMsg?.phase !== 'intermission') return null;
+    return { rank: h.rank, score: h.score, state: h.state, failure: h.failure };
+  }
+
+  submitHighScoreName(name: string): void {
+    const h = this.hs;
+    if (!h || !this.transport || this.status !== 'online') return;
+    // Only a fresh offer, or one the server said could be tried again, can be answered.
+    const retry = h.state === 'failed' && h.failure === 'error';
+    if (h.state !== 'ready' && !retry) return;
+    h.state = 'saving';
+    h.failure = undefined;
+    this.version += 1;
+    this.transport.send(encodeMessage({ t: 'hsName', token: h.token, name }));
+  }
+
   idleWarning(): number | null {
     if (this.kickAt === null) return null;
     return Math.max(0, Math.ceil((this.kickAt - this.now()) / 1000));
@@ -214,6 +258,8 @@ export class NetSession implements GameSource {
     this.welcome = null;
     this.roundMsg = null;
     this.roundEndMsg = null;
+    this.scores = null;
+    this.hs = null;
     this.leaders = [];
     this.rank = 0;
     this.kickAt = null;
@@ -316,11 +362,34 @@ export class NetSession implements GameSource {
         return;
       case 'round':
         this.roundMsg = msg;
-        if (msg.phase === 'playing') this.roundEndMsg = null;
+        if (msg.phase === 'playing') {
+          this.roundEndMsg = null;
+          this.scores = null;
+          this.hs = null;
+        }
         this.version += 1;
         return;
       case 'roundEnd':
         this.roundEndMsg = msg;
+        this.version += 1;
+        return;
+      case 'highscores':
+        this.scores = msg;
+        this.version += 1;
+        return;
+      case 'hsEligible':
+        this.hs = { token: msg.token, rank: msg.rank, score: msg.score, state: 'ready' };
+        this.version += 1;
+        return;
+      case 'hsResult':
+        if (this.hs) {
+          // A refusal after a success (a repeated submit) must not undo the saved state.
+          if (msg.ok) this.hs.state = 'saved';
+          else if (this.hs.state !== 'saved') {
+            this.hs.state = 'failed';
+            this.hs.failure = msg.reason ?? 'error';
+          }
+        }
         this.version += 1;
         return;
       case 'idleWarn':

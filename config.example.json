@@ -5,6 +5,7 @@
   "intermissionSec": 20,
   "idleKickSec": 60,
   "bots": { "fillTo": 12, "min": 0, "max": 10 },
+  "highscores": { "size": 10, "file": "data/highscores.json" },
   "maxCarriages": 150,
   "tickRate": 30,
   "snapshotRate": 15,
