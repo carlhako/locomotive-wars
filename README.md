@@ -1,46 +1,38 @@
 # Locomotive Wars
 
-A top-down train combat game, being turned from a single-player HTML file into a multiplayer web
-game. Many players share one authoritative server world, ram each other's trains, and compete for
-a high-score table.
-
-The original single-player game is preserved unchanged at
-[`reference/locomotive-wars-v4.html`](reference/locomotive-wars-v4.html) and is the behaviour
-reference for the port.
+A multiplayer top-down train combat game. Players share one server world, ram each other's trains
+to grow their own, and compete in timed rounds for an all-time high score table.
 
 ## Requirements
 
-- Node 22 (see [`.nvmrc`](.nvmrc))
-- npm 10 or newer (ships with Node 22)
+Node 22 (see [`.nvmrc`](.nvmrc)) and npm 10 or newer.
 
-## Getting started
+## Run a server
+
+From a [release](https://github.com/carlhako/locomotive-wars/releases) package (already built):
 
 ```bash
-npm install
-npm run dev
+tar xzf locomotive-wars-0.1.0.tar.gz && cd locomotive-wars-0.1.0
+npm ci --omit=dev
+npm start -w @lw/server
 ```
 
-`npm run dev` starts the game server (port 8080) and the Vite client together. Open
-http://localhost:5173, enter a name, and press Play. The client dev server proxies the `/ws` path to
-the game server. To try the client without a server, open http://localhost:5173/?offline.
-
-## Running a server
-
-The server reads its settings from a JSON file: `config.json` in the directory you start it from, or
-the path in the `LW_CONFIG` environment variable. Copy [`config.example.json`](config.example.json)
-(every key at its default) to `config.json` and change what you need; `config.json` is not
-committed. A missing file means all defaults, and a missing key takes its default. Restart the
-server to apply changes.
+From source:
 
 ```bash
-cp config.example.json config.json
+npm ci
 npm run build
 npm start -w @lw/server
 ```
 
-The `PORT` environment variable overrides `port`. The server refuses to start, exiting non-zero and
-listing every bad key, when a value has the wrong type or is out of range. An unknown key (a typo
-such as `maxPlayer`) only prints a warning and is ignored.
+The server serves the game and its WebSocket on one port (default 8080), so players browse to
+`http://<host>:8080`. Put a TLS reverse proxy in front of it for `https`.
+
+## Configure
+
+Copy [`config.example.json`](config.example.json) to `config.json` in the project root (or point
+`LW_CONFIG` at another file) and restart the server. Missing keys take their defaults, `PORT`
+overrides `port`, and a bad value stops the server with a list of errors.
 
 <!-- config-keys:start -->
 
@@ -63,77 +55,26 @@ such as `maxPlayer`) only prints a warning and is ignored.
 
 <!-- config-keys:end -->
 
-The number of bots is `clamp(bots.fillTo - humans, bots.min, bots.max)`. Bots are added one a
-second, are never removed while alive, and are trimmed at the start of the next round. Set
-`bots.fillTo` and `bots.min` to `0` for a server with no bots.
+The number of bots is `clamp(bots.fillTo - humans, bots.min, bots.max)`; set `bots.fillTo` and
+`bots.min` to `0` for no bots.
 
-### Rounds
+High scores live in `highscores.file` and are served at `GET /api/highscores`. To edit or reset
+them, stop the server, edit or delete the file, and start it again. A damaged file is renamed to
+`highscores.json.corrupt-<timestamp>` and the table starts empty.
 
-A round lasts `roundLengthSec`, then an intermission of `intermissionSec` shows the final standings
-and the winner (the player whose train reached the greatest length during the round; the player who
-got there first wins a tie). The next round resets the world and every train. With no human
-connected the world is paused, and the next player to join starts a fresh round.
+## Development
 
-### High scores
+```bash
+npm install
+npm run dev
+```
 
-The server keeps an all-time table of the best round results by human players, ranked by round best
-(the longest train reached in a round; the earlier result wins a tie). Bots never enter it. When a
-round ends, each connected human whose round best beats the lowest entry (or fills a free slot) is
-added at once under their join name, and during the intermission they can type a name for the
-entry. The table is shown on the join screen and in the intermission overlay, and
-`GET /api/highscores` returns it as JSON.
+This starts the server and the Vite client together; open http://localhost:5173. Add `?offline`
+to the URL to try the client without a server. Checks: `npm test`, `npm run lint`,
+`npm run typecheck`.
 
-The table lives in the JSON file named by `highscores.file` (default `data/highscores.json`; a
-relative path is read from the directory you start the server in, like `config.json`). The server
-creates the directory, reads the file at startup, and replaces it atomically after each change, so
-a crash never leaves a half-written file.
-
-- **Edit an entry** (to remove an offensive name, say): stop the server, change the `name` in the
-  file, and start it again. Keep the file valid JSON; entries beyond `highscores.size` are dropped
-  at startup.
-- **Reset the table:** stop the server, delete the file (`rm data/highscores.json`), and start it
-  again. The table starts empty.
-- **A damaged file:** if the file is not valid or fails its checks at startup, the server logs an
-  error, renames it to `highscores.json.corrupt-<timestamp>` next to the original, and starts with
-  an empty table. Fix or discard the renamed file by hand.
-
-Back the file up like any other data; it is the only copy of the table.
-
-## Scripts
-
-| Script                       | What it does                                         |
-| ---------------------------- | ---------------------------------------------------- |
-| `npm run dev`                | Server (`tsx watch`) and client (Vite) together      |
-| `npm run build`              | Build `shared`, then `server` (`tsc`), then `client` |
-| `npm run soak -w @lw/server` | 60 s load test: 16 clients, tick rate and bandwidth  |
-| `npm test`                   | Run every package's Vitest tests                     |
-| `npm run lint`               | ESLint and a Prettier format check                   |
-| `npm run typecheck`          | `tsc --noEmit` in every package                      |
-| `npm run format`             | Rewrite files with Prettier                          |
-
-## Layout
-
-| Package           | Name         | Purpose                                                 |
-| ----------------- | ------------ | ------------------------------------------------------- |
-| `packages/shared` | `@lw/shared` | Simulation, constants, protocol types. No DOM, no Node. |
-| `packages/server` | `@lw/server` | Node game server                                        |
-| `packages/client` | `@lw/client` | Browser game, built with Vite                           |
-
-`@lw/shared` is consumed as TypeScript source in development (via a `source` export condition) and
-as built output (`dist/`) in production. Lint and the TypeScript config both reject browser and
-Node APIs inside it, so the same simulation runs on server and client.
-
-## Roadmap
-
-Work is planned as numbered [OpenSpec](openspec/) changes. Each builds on the one before.
-
-1. **`01-bootstrap-repo-and-scaffold`**: repository, monorepo, tooling, CI (this change).
-2. **`02-extract-shared-simulation`**: game rules as a headless, multi-train simulation.
-3. **`03-client-renderer-from-snapshots`**: client draws from a self-contained world view.
-4. **`04-realtime-server-netcode`**: authoritative server and real-time protocol.
-5. **`05-pvp-rules-and-respawn`**: any train can ram any other; immediate respawn.
-6. **`06-server-config-and-rounds`**: operator config file, timed rounds, bots.
-7. **`07-highscores`**: persistent all-time high-score table.
+The code is split into `packages/shared` (the simulation, used by both sides), `packages/server`
+(Node) and `packages/client` (browser, built with Vite).
 
 ## License
 
