@@ -1,5 +1,6 @@
 import { encodeMessage, PROTOCOL_VERSION } from '@lw/shared';
 import { WebSocket } from 'ws';
+import { parseConfig } from './config.ts';
 import { GameServer } from './server.ts';
 
 /**
@@ -59,11 +60,18 @@ async function main(): Promise<boolean> {
   if (EXTERNAL) {
     httpBase = EXTERNAL;
   } else {
-    server = new GameServer({
+    const parsed = parseConfig({
       port: 0,
+      maxPlayers: Math.min(100, Math.max(16, CLIENTS)),
+      roundLengthSec: 7200,
+      idleKickSec: 0,
+      bots: { fillTo: BOTS, min: BOTS, max: BOTS },
+    });
+    if (!parsed.ok) throw new Error(parsed.errors.join('; '));
+    server = new GameServer({
       host: '127.0.0.1',
       clientDir: '',
-      botCount: BOTS,
+      config: parsed.config,
       compress: COMPRESS,
       log: (m) => {
         if (m.includes('overrun')) overruns += 1;

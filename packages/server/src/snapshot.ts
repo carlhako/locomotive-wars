@@ -11,6 +11,7 @@ import {
 } from '@lw/shared';
 import type {
   EnemyRow,
+  LeaderRow,
   OverviewMsg,
   OwnTrain,
   SimEvent,
@@ -52,6 +53,7 @@ export function ownTrainOf(t: TrainState): OwnTrain {
     fm: r1(fuelCapacityOf(t)),
     fl: flagsOf(t),
     sq: t.spawnSeq,
+    rb: t.roundBest,
     cs: carriageCoords(t),
     dn: t.drones.map((d) => ang(d.angle)),
   };
@@ -136,10 +138,19 @@ export function buildSnapshot(input: SnapshotInput): SnapshotMsg {
   };
 }
 
-/** Every living train's id, head position, colour, and name, for the minimap and kill feed. */
-export function buildOverview(trains: readonly TrainState[]): OverviewMsg {
+/**
+ * Every living train's id, head position, colour, and name, for the minimap and kill feed, with
+ * the leaderboard and the recipient's own rank (0 if none).
+ */
+export function buildOverview(
+  trains: readonly TrainState[],
+  lb: LeaderRow[] = [],
+  rk = 0,
+): OverviewMsg {
   return {
     t: 'ov',
     h: trains.filter((t) => t.alive).map((t) => [t.id, round(t.x), round(t.y), t.color, t.name]),
+    lb,
+    rk,
   };
 }

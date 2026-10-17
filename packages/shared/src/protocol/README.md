@@ -10,7 +10,7 @@ numbers to keep snapshots small. Binary encoding and delta compression are a lat
 
 ## Versioning
 
-`PROTOCOL_VERSION` (currently `2`) is bumped on any incompatible change to a message. The first
+`PROTOCOL_VERSION` (currently `3`) is bumped on any incompatible change to a message. The first
 message a client sends is `hello` carrying its version; a server that does not speak it replies
 `reject` with reason `version` and closes the socket. The client then tells the player to reload.
 
@@ -30,7 +30,8 @@ message a client sends is `hello` carrying its version; a server that does not s
 | `PING_INTERVAL_MS`         | 2000 ms    | Clock-sync ping period (the client also sends a few right after joining) |
 | `SNAPSHOT_TIMEOUT_MS`      | 5000 ms    | Without a snapshot this long, the client treats the connection as lost   |
 
-All of these are constants until change 06 moves the tunable ones into the server config.
+The tick rate, snapshot rate, and view radius are server config (see the root README); the values
+above are the defaults, and `welcome` carries the ones in force. The rest are constants.
 
 ## Client to server
 
@@ -44,29 +45,34 @@ A client never sends a position. Unknown fields are dropped when a message is de
 
 ## Server to client
 
-| `t`       | Fields                                                                         | When                                                                                                                      |
-| --------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `welcome` | `v`, `id` (the session's train), `tickRate`, `snapRate`, `mapSize`, `interpMs` | Once, in reply to a good `hello`.                                                                                         |
-| `reject`  | `reason`: `version`, `full`, or `malformed`                                    | Instead of `welcome`; the socket then closes.                                                                             |
-| `meta`    | `trains: [{id, name, color, ctl, kinds}]`, `gone: [id]`                        | When a train is first in view, its carriage kinds change, or it leaves view. Always sent before the `snap` that needs it. |
-| `snap`    | see below                                                                      | At the snapshot rate.                                                                                                     |
-| `ov`      | `h: [[id, x, y, color, name]]`                                                 | At the overview rate: every living train, for the minimap and kill feed.                                                  |
-| `pong`    | `c` (echoed), `st` server time (ms)                                            | In reply to `ping`.                                                                                                       |
+| `t`         | Fields                                                                                                                             | When                                                                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `welcome`   | `v`, `id` (the session's train), `tickRate`, `snapRate`, `mapSize`, `interpMs`, `roundLengthSec`, `intermissionSec`, `idleKickSec` | Once, in reply to a good `hello`. `id` is promised now; the train appears when a round is playing.                                            |
+| `reject`    | `reason`: `version`, `full`, or `malformed`; for `full` also `humans`, `max`                                                       | Instead of `welcome`; the socket then closes.                                                                                                 |
+| `round`     | `phase` (`playing` or `intermission`), `roundId`, `endsAt` (server ms)                                                             | On join and at every phase change.                                                                                                            |
+| `roundEnd`  | `roundId`, `standings: [[id, name, isBot, best, kills]]`, `winnerId`, `nextRoundAt`                                                | When a round ends, and to a player who joins during the intermission.                                                                         |
+| `idleWarn`  | `secondsLeft`                                                                                                                      | The session has been idle until 10 s before the kick.                                                                                         |
+| `idleClear` | none                                                                                                                               | The session did something; the warning is withdrawn.                                                                                          |
+| `kicked`    | `reason`: `idle`                                                                                                                   | Just before the server closes the socket with code 4000.                                                                                      |
+| `meta`      | `trains: [{id, name, color, ctl, kinds}]`, `gone: [id]`                                                                            | When a train is first in view, its carriage kinds change, or it leaves view. Always sent before the `snap` that needs it.                     |
+| `snap`      | see below                                                                                                                          | At the snapshot rate.                                                                                                                         |
+| `ov`        | `h: [[id, x, y, color, name]]`, `lb: [[id, name, best, now, isBot]]`, `rk`                                                         | At the overview rate: every living train for the minimap and kill feed, the top-10 leaderboard, and the session's own rank (`rk`, 0 if none). |
+| `pong`      | `c` (echoed), `st` server time (ms)                                                                                                | In reply to `ping`.                                                                                                                           |
 
 ### `snap`
 
-| Key   | Content                                                                                                                                                                     |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `k`   | Simulation tick                                                                                                                                                             |
-| `st`  | Server time of the tick in ms (`k × 1000 / 30`); the clock `pong.st` also uses                                                                                              |
-| `ack` | Sequence number of the last `in` applied to the session's train                                                                                                             |
-| `me`  | The session's own train in full: `x y a hp mh f fm fl sq cs dn` (position, heading, hull, max hull, fuel, max fuel, flags, spawn counter, carriage x/y pairs, drone angles) |
-| `tr`  | Other trains in view: `[id, x, y, angle, hp, maxHp, flags, spawnSeq, ...carriage x/y pairs]`                                                                                |
-| `en`  | Enemies: `[id, kind, x, y, angle, hp, maxHp, bossName?]`                                                                                                                    |
-| `tl`  | Trailers: `[id, kind, x, y]`                                                                                                                                                |
-| `dr`  | Dropped pickups: `[id, kind, x, y, age]`                                                                                                                                    |
-| `pr`  | Projectiles: `[id, kind, x, y, vx, vy]`                                                                                                                                     |
-| `ev`  | Simulation events since the previous snapshot (see below)                                                                                                                   |
+| Key   | Content                                                                                                                                                                                                                              |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `k`   | Simulation tick                                                                                                                                                                                                                      |
+| `st`  | Server time of the tick in ms (`k × 1000 / 30`); the clock `pong.st` also uses                                                                                                                                                       |
+| `ack` | Sequence number of the last `in` applied to the session's train                                                                                                                                                                      |
+| `me`  | The session's own train in full: `x y a hp mh f fm fl sq rb cs dn` (position, heading, hull, max hull, fuel, max fuel, flags, spawn counter, round best, carriage x/y pairs, drone angles). `null` while waiting out an intermission |
+| `tr`  | Other trains in view: `[id, x, y, angle, hp, maxHp, flags, spawnSeq, ...carriage x/y pairs]`                                                                                                                                         |
+| `en`  | Enemies: `[id, kind, x, y, angle, hp, maxHp, bossName?]`                                                                                                                                                                             |
+| `tl`  | Trailers: `[id, kind, x, y]`                                                                                                                                                                                                         |
+| `dr`  | Dropped pickups: `[id, kind, x, y, age]`                                                                                                                                                                                             |
+| `pr`  | Projectiles: `[id, kind, x, y, vx, vy]`                                                                                                                                                                                              |
+| `ev`  | Simulation events since the previous snapshot (see below)                                                                                                                                                                            |
 
 - Kinds are indexes into `ENEMY_KINDS`, `PICKUP_KINDS`, and `PROJECTILE_KINDS`.
 - Flags are a bitmask: `TRAIN_FLAG_BRIDGE` (1), `TRAIN_FLAG_BOOST` (2), `TRAIN_FLAG_DEAD` (4),

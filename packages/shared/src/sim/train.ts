@@ -84,6 +84,8 @@ export function createTrain(spawn: TrainSpawn, rules: TrainRules): TrainState {
     protectedFor: 0,
     spawnSeq: 0,
     kills: 0,
+    roundBest: 0,
+    roundBestTick: 0,
   };
   const pos = sampleBehind(train.path, rules.spacing, rules.size);
   train.carriages.push({ kind: 'locomotive', x: pos.x, y: pos.y, angle: pos.angle });
@@ -100,6 +102,28 @@ export function maxHullOf(train: TrainState): number {
 export function recalcMaxHull(train: TrainState): void {
   train.maxHull = maxHullOf(train);
   if (train.hull > train.maxHull) train.hull = train.maxHull;
+}
+
+/** A train's live score: the carriages behind its locomotive. */
+export function scoreOf(train: TrainState): number {
+  return train.carriages.length - 1;
+}
+
+/** Raises the round best to the live score if it has been beaten, recording the tick. */
+export function noteScore(train: TrainState, tick: number): void {
+  const score = scoreOf(train);
+  if (score > train.roundBest) {
+    train.roundBest = score;
+    train.roundBestTick = tick;
+  }
+}
+
+/** Ranking order for a round: best desc, earlier tick wins a tie, then lower id. */
+export function compareRank(
+  a: Pick<TrainState, 'id' | 'roundBest' | 'roundBestTick'>,
+  b: Pick<TrainState, 'id' | 'roundBest' | 'roundBestTick'>,
+): number {
+  return b.roundBest - a.roundBest || a.roundBestTick - b.roundBestTick || a.id - b.id;
 }
 
 /** Distance from the head at which trailers and drops are collected. */

@@ -11,6 +11,9 @@ import type { SnapshotMsg } from '@lw/shared';
 import type { GameServer } from './server.ts';
 import { sleep, startServer, TestClient } from './testing.ts';
 
+/** Config keys that leave the world free of bots. */
+const NO_BOTS = { bots: { fillTo: 0 } };
+
 let server: GameServer | null = null;
 const clients: TestClient[] = [];
 
@@ -49,6 +52,9 @@ describe('handshake', () => {
       snapRate: SNAPSHOT_RATE,
       mapSize: 6000,
       interpMs: 133,
+      roundLengthSec: 600,
+      intermissionSec: 20,
+      idleKickSec: 60,
     });
     const train = trainOf(c.id);
     expect(train.name).toBe('Casey');
@@ -89,7 +95,7 @@ describe('handshake', () => {
   });
 
   it('refuses a second hello on the same connection', async () => {
-    const port = await start();
+    const port = await start({ config: NO_BOTS });
     const c = await join(port);
     const before = server?.world.state.trains.length;
     c.send({ t: 'hello', v: PROTOCOL_VERSION, name: 'Again' });
@@ -249,7 +255,7 @@ describe('snapshots', () => {
   });
 
   it('keeps distant trains out of snapshots but lists every train in the overview', async () => {
-    const port = await start({ botCount: 0 });
+    const port = await start({ config: NO_BOTS });
     const a = await join(port, 'A');
     const b = await join(port, 'B');
     const ta = trainOf(a.id);
@@ -274,7 +280,7 @@ describe('snapshots', () => {
   });
 
   it('sends a distant train destruction to everyone (global kill feed)', async () => {
-    const port = await start({ botCount: 0 });
+    const port = await start({ config: NO_BOTS });
     const a = await join(port, 'A');
     const b = await join(port, 'B');
     const ta = trainOf(a.id);
@@ -309,7 +315,7 @@ describe('snapshots', () => {
   });
 
   it('respawns a destroyed player at a new position as a protected starter train', async () => {
-    const port = await start({ botCount: 0 });
+    const port = await start({ config: NO_BOTS });
     const a = await join(port, 'A');
     const b = await join(port, 'B');
     const ta = trainOf(a.id);
@@ -356,42 +362,13 @@ describe('snapshots', () => {
   });
 
   it('announces a newly picked-up carriage kind in meta', async () => {
-    const port = await start({ botCount: 0 });
+    const port = await start({ config: NO_BOTS });
     const c = await join(port);
     await c.waitFor(() => c.of('meta').length > 0);
     server!.world.addCarriage(c.id, 'missile');
     await c.waitFor(() =>
       c.of('meta').some((m) => m.trains.some((t) => t.id === c.id && t.kinds.includes('missile'))),
     );
-  });
-});
-
-describe('bots', () => {
-  it('keeps six bots in the world and reports them in /healthz', async () => {
-    const port = await start();
-    const res = await fetch(`http://127.0.0.1:${port}/healthz`);
-    const body = (await res.json()) as { bots: number; humans: number };
-    expect(body.bots).toBe(6);
-    expect(body.humans).toBe(0);
-    await join(port);
-    const after = (await (await fetch(`http://127.0.0.1:${port}/healthz`)).json()) as {
-      bots: number;
-      humans: number;
-    };
-    expect(after).toMatchObject({ bots: 6, humans: 1 });
-  });
-
-  it('respawns a destroyed bot as a starter train', async () => {
-    await start();
-    const world = server!.world;
-    const bot = world.state.trains.find((t) => t.controller === 'bot')!;
-    bot.alive = false;
-    await sleep(120);
-    const back = world.getTrain(bot.id)!;
-    expect(back.alive).toBe(true);
-    expect(back.spawnSeq).toBe(1);
-    expect(back.carriages.map((c) => c.kind)).toEqual(['locomotive', 'mg']);
-    expect(world.state.trains.filter((t) => t.controller === 'bot')).toHaveLength(6);
   });
 });
 

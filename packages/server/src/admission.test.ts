@@ -1,0 +1,63 @@
+import { describe, expect, it } from 'vitest';
+import type { TrainInput } from '@lw/shared';
+import { AIM_ACTIVITY, IdleTracker, isFull } from './admission.ts';
+
+const IDLE: TrainInput = { turn: 0, boost: false, brake: false, aim: 0 };
+
+describe('isFull', () => {
+  it('is full at the limit', () => {
+    expect(isFull(15, 16)).toBe(false);
+    expect(isFull(16, 16)).toBe(true);
+  });
+});
+
+describe('IdleTracker.observe', () => {
+  it('ignores identical heartbeats', () => {
+    const t = new IdleTracker(IDLE);
+    expect(t.observe({ ...IDLE })).toBe(false);
+  });
+
+  it('counts a change of turn, boost, or brake', () => {
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, turn: 1 })).toBe(true);
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, boost: true })).toBe(true);
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, brake: true })).toBe(true);
+  });
+
+  it('counts an aim change beyond 0.05 rad, measured the short way round', () => {
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, aim: AIM_ACTIVITY * 0.9 })).toBe(false);
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, aim: AIM_ACTIVITY * 1.1 })).toBe(true);
+    const wrap = new IdleTracker({ ...IDLE, aim: Math.PI - 0.01 });
+    expect(wrap.observe({ ...IDLE, aim: -Math.PI + 0.01 })).toBe(false);
+  });
+
+  it('measures slow drift from the last counted input, not the previous message', () => {
+    const t = new IdleTracker(IDLE);
+    expect(t.observe({ ...IDLE, aim: 0.03 })).toBe(false);
+    expect(t.observe({ ...IDLE, aim: 0.06 })).toBe(true);
+  });
+});
+
+describe('IdleTracker.tick', () => {
+  it('warns once, then kicks', () => {
+    const t = new IdleTracker(IDLE);
+    const actions: Array<string | null> = [];
+    for (let i = 0; i < 6; i++) actions.push(t.tick(3, 6));
+    expect(actions).toEqual([null, null, 'warn', null, null, 'kick']);
+  });
+
+  it('resets on activity and lets the warning be cleared', () => {
+    const t = new IdleTracker(IDLE);
+    for (let i = 0; i < 3; i++) t.tick(3, 6);
+    expect(t.warned).toBe(true);
+    expect(t.observe({ ...IDLE, turn: 1 })).toBe(true);
+    expect(t.clearWarning()).toBe(true);
+    expect(t.clearWarning()).toBe(false);
+    expect(t.idleTicks).toBe(0);
+  });
+
+  it('never acts when the kick is disabled', () => {
+    const t = new IdleTracker(IDLE);
+    for (let i = 0; i < 100; i++) expect(t.tick(0, 0)).toBeNull();
+    expect(t.idleTicks).toBe(0);
+  });
+});

@@ -7,8 +7,11 @@ import {
   SNAPSHOT_TIMEOUT_MS,
 } from '@lw/shared';
 import type {
+  LeaderRow,
   OverviewRow,
   RejectReason,
+  RoundEndMsg,
+  RoundMsg,
   ServerMessage,
   SimEvent,
   SnapshotMsg,
@@ -17,7 +20,7 @@ import type {
   WelcomeMsg,
   WorldView,
 } from '@lw/shared';
-import type { GameSource } from '../source.ts';
+import type { Board, GameSource, RoundResultInfo, RoundStatus } from '../source.ts';
 import { SnapshotBuffer } from './buffer.ts';
 import { ClockSync } from './clock.ts';
 import { LocalTrain } from './localTrain.ts';
@@ -38,7 +41,7 @@ const DEFAULT_MAP_SIZE = 6000;
 export type ConnectionStatus = 'connecting' | 'online' | 'disconnected';
 
 /** Why a session ended, for the player: either a server refusal or a lost connection. */
-export type DisconnectReason = RejectReason | 'closed' | 'timeout';
+export type DisconnectReason = RejectReason | 'closed' | 'timeout' | 'kicked';
 
 export interface NetOptions {
   url: string;
@@ -73,6 +76,8 @@ export class NetSession implements GameSource {
   generation = 0;
   /** Why the session is disconnected, while it is. */
   reason: DisconnectReason | null = null;
+  /** Players and limit from a `full` refusal. */
+  fullInfo: { humans: number; max: number } | null = null;
 
   private readonly connect: Connect;
   private readonly now: () => number;
@@ -88,6 +93,12 @@ export class NetSession implements GameSource {
   private local = new LocalTrain(DEFAULT_MAP_SIZE);
   private meta = new Map<number, TrainMeta>();
   private overview: OverviewRow[] = [];
+  private roundMsg: RoundMsg | null = null;
+  private roundEndMsg: RoundEndMsg | null = null;
+  private leaders: LeaderRow[] = [];
+  private rank = 0;
+  /** Client time at which the inactivity kick lands, while a warning stands. */
+  private kickAt: number | null = null;
   private pendingEvents: SimEvent[] = [];
   private lastSnapshotAt = 0;
 
@@ -146,6 +157,48 @@ export class NetSession implements GameSource {
     return view;
   }
 
+  round(): RoundStatus | null {
+    const r = this.roundMsg;
+    if (!r) return null;
+    const left = (r.endsAt - this.clock.serverTime(this.now())) / 1000;
+    return { phase: r.phase, roundId: r.roundId, secondsLeft: Math.max(0, left) };
+  }
+
+  board(): Board | null {
+    if (this.leaders.length === 0) return null;
+    return {
+      rows: this.leaders.map(([id, name, best, now, bot]) => ({
+        id,
+        name,
+        best,
+        now,
+        bot: bot === 1,
+      })),
+      rank: this.rank,
+    };
+  }
+
+  roundResult(): RoundResultInfo | null {
+    const e = this.roundEndMsg;
+    if (!e || this.roundMsg?.phase !== 'intermission') return null;
+    return {
+      roundId: e.roundId,
+      winnerId: e.winnerId,
+      standings: e.standings.map(([id, name, bot, best, kills]) => ({
+        id,
+        name,
+        bot: bot === 1,
+        best,
+        kills,
+      })),
+    };
+  }
+
+  idleWarning(): number | null {
+    if (this.kickAt === null) return null;
+    return Math.max(0, Math.ceil((this.kickAt - this.now()) / 1000));
+  }
+
   /** Names and colours of every train the session has heard of, in view or not. */
   *knownTrains(): Iterable<{ id: number; name: string; color: string }> {
     for (const m of this.meta.values()) yield m;
@@ -157,7 +210,13 @@ export class NetSession implements GameSource {
   private open(): void {
     this.status = 'connecting';
     this.reason = null;
+    this.fullInfo = null;
     this.welcome = null;
+    this.roundMsg = null;
+    this.roundEndMsg = null;
+    this.leaders = [];
+    this.rank = 0;
+    this.kickAt = null;
     this.clock = new ClockSync();
     this.buffer = new SnapshotBuffer(this.mapSize);
     this.local = new LocalTrain(this.mapSize);
@@ -223,6 +282,7 @@ export class NetSession implements GameSource {
   private fail(reason: DisconnectReason): void {
     if (this.status === 'disconnected') return;
     const wasConnecting = this.status === 'connecting';
+    this.kickAt = null;
     this.teardown();
     this.setStatus('disconnected', reason);
     if (wasConnecting) this.rejectReady?.(new Error(reason));
@@ -249,7 +309,28 @@ export class NetSession implements GameSource {
         this.onWelcome(msg);
         return;
       case 'reject':
+        if (msg.humans !== undefined && msg.max !== undefined) {
+          this.fullInfo = { humans: msg.humans, max: msg.max };
+        }
         this.fail(msg.reason);
+        return;
+      case 'round':
+        this.roundMsg = msg;
+        if (msg.phase === 'playing') this.roundEndMsg = null;
+        this.version += 1;
+        return;
+      case 'roundEnd':
+        this.roundEndMsg = msg;
+        this.version += 1;
+        return;
+      case 'idleWarn':
+        this.kickAt = this.now() + msg.secondsLeft * 1000;
+        return;
+      case 'idleClear':
+        this.kickAt = null;
+        return;
+      case 'kicked':
+        this.fail('kicked');
         return;
       case 'meta':
         for (const t of msg.trains) this.meta.set(t.id, t);
@@ -261,6 +342,8 @@ export class NetSession implements GameSource {
         return;
       case 'ov':
         this.overview = msg.h;
+        this.leaders = msg.lb;
+        this.rank = msg.rk;
         this.version += 1;
         return;
       case 'pong': {
@@ -371,7 +454,9 @@ export class NetSession implements GameSource {
     const base = this.buffer.sample(serverNow - this.interpMs, this.meta);
     if (!base) return emptyView(this.localId);
 
-    const pose = this.local.sample(serverNow, now, this.input);
+    // Between rounds the world is frozen on the server, so the local train must not run ahead.
+    const frozen = this.roundMsg?.phase === 'intermission';
+    const pose = frozen ? null : this.local.sample(serverNow, now, this.input);
     const localId = this.localId;
     const trains = base.trains.map((t) => {
       if (t.id !== localId || !pose) return t;

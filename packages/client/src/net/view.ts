@@ -109,6 +109,7 @@ export function ownTrainView(
     boosting: (me.fl & TRAIN_FLAG_BOOST) !== 0,
     protected: (me.fl & TRAIN_FLAG_PROTECTED) !== 0,
     spawnSeq: me.sq,
+    roundBest: me.rb,
     carriages: carriagesOf(meta, me.x, me.y, me.a, me.cs, size),
     drones: [...me.dn],
   };
@@ -148,6 +149,7 @@ export function viewFromSnapshot(
       boosting: (flags & TRAIN_FLAG_BOOST) !== 0,
       protected: (flags & TRAIN_FLAG_PROTECTED) !== 0,
       spawnSeq,
+      roundBest: 0,
       carriages: carriagesOf(m, x, y, angle, row.slice(8) as number[], size),
       drones: [],
     });

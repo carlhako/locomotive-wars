@@ -1,13 +1,20 @@
 import { MAX_INPUT_RATE, MAX_MALFORMED } from '@lw/shared';
 import type { TrainInput } from '@lw/shared';
 import type { WebSocket } from 'ws';
+import type { IdleTracker } from './admission.ts';
 import { MetaTracker } from './interest.ts';
 
 /** One connected client: its socket, its train once it has joined, and per-connection limits. */
 export class Session {
-  /** Null until the client's hello has been accepted. */
+  /** True once the client's hello has been accepted. It counts toward the player limit. */
+  joined = false;
+  /** The train id promised in `welcome`. Set when joined, whether or not the train exists yet. */
+  reservedId: number | null = null;
+  /** Null until the train exists: a player who joins during an intermission waits for the next round. */
   trainId: number | null = null;
   name = '';
+  /** Set when the session joins; watches for inactivity. */
+  idle: IdleTracker | null = null;
   readonly meta = new MetaTracker();
   /** Latest input received since the last tick; applied once per tick. */
   pending: { input: TrainInput; seq: number } | null = null;

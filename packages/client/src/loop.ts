@@ -8,6 +8,12 @@ import { ScreenShake } from './fx/shake.ts';
 import { Banner, DamageFlash } from './hud/banner.ts';
 import { bindMuteButton, Hud } from './hud/hud.ts';
 import { KillFeed, KillFeedView } from './hud/killfeed.ts';
+import {
+  boardFromView,
+  LeaderboardView,
+  leaderboardModel,
+  localScoreOf,
+} from './hud/leaderboard.ts';
 import { InputState } from './input.ts';
 import { BridgeAnimator } from './render/bridge.ts';
 import {
@@ -23,6 +29,7 @@ import { drawMinimap, MINIMAP_SIZE } from './render/minimap.ts';
 import { renderScene } from './render/scene.ts';
 import { generateStars } from './render/stars.ts';
 import type { GameSource } from './source.ts';
+import { RoundOverlay } from './ui/roundOverlay.ts';
 
 /** Longest frame time fed to the game, so a stalled tab does not lurch on return. */
 const MAX_FRAME_SECONDS = 0.1;
@@ -45,6 +52,8 @@ export class Game {
   private readonly input = new InputState();
   private readonly sound = new SoundFX();
   private readonly hud = new Hud();
+  private readonly leaderboard = new LeaderboardView(el('leaderboard-rows'));
+  private readonly roundOverlay = new RoundOverlay();
 
   private readonly camera = createCamera();
   private readonly stars = generateStars();
@@ -183,7 +192,12 @@ export class Game {
       dt,
     );
     drawMinimap(this.minimapCtx, view, size, { width, height });
-    this.hud.update(view);
+    const round = this.source.round?.() ?? null;
+    this.hud.update(view, round, this.source.idleWarning?.() ?? null);
+    this.leaderboard.render(
+      leaderboardModel(this.source.board?.() ?? boardFromView(view), localScoreOf(view)),
+    );
+    this.roundOverlay.update(round, this.source.roundResult?.() ?? null, view.localId);
     this.killFeedView.render();
   }
 

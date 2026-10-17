@@ -37,12 +37,13 @@ npm start -w @lw/server
 Open <http://localhost:8080>. The server looks for the client in `packages/client/dist`. If that
 directory does not exist, `/` answers 404 with a note and the rest of the server still works.
 
-| Environment variable | Default | Meaning               |
-| -------------------- | ------- | --------------------- |
-| `PORT`               | `8080`  | TCP port to listen on |
+| Environment variable | Default       | Meaning                                  |
+| -------------------- | ------------- | ---------------------------------------- |
+| `PORT`               | from config   | TCP port to listen on (overrides `port`) |
+| `LW_CONFIG`          | `config.json` | Path of the JSON config file             |
 
-Everything else (tick rate, view radius, bot count) is a constant for now; change 06 adds a config
-file.
+Everything else is in the config file; see "Running a server" in the
+[root README](../../README.md#running-a-server) for every key, its range, and its default.
 
 ## Endpoints
 
@@ -70,8 +71,15 @@ curl http://localhost:8080/healthz
 - **Snapshots.** Every second tick each session gets a snapshot of what is within 1600 units of its
   train (`src/interest.ts`, `src/snapshot.ts`), preceded by a `meta` message when it has new trains
   or carriage kinds to learn about. A 2 Hz overview of all trains feeds the minimap.
-- **Bots.** `src/bots.ts` keeps 6 bot trains in the world and respawns destroyed ones. It is
-  temporary; change 06 replaces it with configurable bot fill.
+- **Rounds.** `src/rounds.ts` is a tick-counted clock: `playing` for `roundLengthSec`, then an
+  `intermission` (world frozen, input dropped, standings broadcast), then a fresh round
+  (`World.resetForRound`). With no humans connected the world is paused. `GameServerOptions.onRoundEnd`
+  receives each round's standings.
+- **Bots.** `src/population.ts` keeps `clamp(fillTo - humans, min, max)` bots: one added a second
+  when short, destroyed ones not respawned when over, the excess trimmed at round reset.
+- **Admission.** More than `maxPlayers` humans get `reject {full}`. A player with no meaningful
+  input change for `idleKickSec` of play is warned 10 s ahead, then sent `kicked` and closed with
+  code 4000 (`src/admission.ts`).
 
 A destroyed human train is respawned in place at the start of the next tick (`World.respawnTrain`):
 same session and train id, fresh protected starter train at a safe position. Nothing carries over,
@@ -108,13 +116,17 @@ server on an ephemeral port and talk to it over WebSocket and HTTP.
 
 ```
 src/
-  main.ts       reads PORT, starts the server, shuts down on SIGINT/SIGTERM
+  main.ts       loads the config, starts the server, shuts down on SIGINT/SIGTERM
+  config.ts     config file schema (zod), defaults, validation, PORT override
   server.ts     GameServer: http + ws + world + sessions + the tick
   http.ts       static client (sirv) and /healthz
   loop.ts       fixed-step accumulator loop
   sessions.ts   per-connection state and limits
   interest.ts   what a session can see; meta diffing
   snapshot.ts   world -> snap / ov messages
-  bots.ts       temporary fixed bot population
+  rounds.ts     round clock (idle / playing / intermission)
+  standings.ts  ranking, leaderboard rows, round results
+  population.ts bot fill
+  admission.ts  player limit and idle tracking
   soak.ts       the soak test
 ```

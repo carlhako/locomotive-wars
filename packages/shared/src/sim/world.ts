@@ -40,7 +40,14 @@ import {
 import { spawnBoss, spawnEnemyAt, stepEnemies } from './enemies.ts';
 import { clamp, TWO_PI, wrapDist, wrapPos } from './math.ts';
 import { Rng } from './rng.ts';
-import { addCarriage, advanceTrain, createTrain, pickupRadiusOf, updateBridge } from './train.ts';
+import {
+  addCarriage,
+  advanceTrain,
+  createTrain,
+  noteScore,
+  pickupRadiusOf,
+  updateBridge,
+} from './train.ts';
 import type { TrainRules } from './train.ts';
 import type {
   AddTrainOptions,
@@ -182,7 +189,7 @@ export class World {
    * given.
    */
   addTrain(opts: AddTrainOptions = {}): TrainState {
-    const id = this.newId();
+    const id = opts.id ?? this.newId();
     let x = opts.x;
     let y = opts.y;
     if (x === undefined || y === undefined) {
@@ -208,6 +215,7 @@ export class World {
     }
     train.hull = train.maxHull;
     train.protectedFor = opts.protectedFor ?? SPAWN_PROTECTION;
+    noteScore(train, this.state.tick);
     this.state.trains.push(train);
     return train;
   }
@@ -241,8 +249,43 @@ export class World {
     fresh.protectedFor = SPAWN_PROTECTION;
     fresh.spawnSeq = old.spawnSeq + 1;
     fresh.input = old.input;
+    // The round best outlives a destruction; the live score starts over.
+    fresh.roundBest = old.roundBest;
+    fresh.roundBestTick = old.roundBestTick;
+    noteScore(fresh, this.state.tick);
     Object.assign(old, fresh);
     return true;
+  }
+
+  /**
+   * Starts a fresh round: clears enemies, projectiles, pickups, and the boss, regenerates
+   * trailers and enemies, restarts the boss schedule, and respawns every train as a protected
+   * starter with its round best and kills back at zero. The random source is reseeded, so a
+   * round is reproducible from its seed and the inputs that follow.
+   */
+  resetForRound(seed: number): void {
+    const s = this.state;
+    this.rng.state = seed >>> 0;
+    // Events left over from before the reset (a train removed while the world was frozen)
+    // belong to the old round.
+    this.events = [];
+    s.enemies = [];
+    s.projectiles = [];
+    s.trailers = [];
+    s.drops = [];
+    s.bossId = null;
+    s.bossTimer = BOSS_INTERVAL;
+    s.trailerTimer = 0;
+    s.enemyTimer = 0;
+    for (let i = 0; i < this.options.initialTrailers; i++) this.spawnTrailer();
+    for (let i = 0; i < this.options.initialEnemies; i++) this.spawnEnemy();
+    for (const train of [...s.trains]) {
+      this.respawnTrain(train.id);
+      train.roundBest = 0;
+      train.roundBestTick = 0;
+      train.kills = 0;
+      noteScore(train, s.tick);
+    }
   }
 
   /**
@@ -281,7 +324,9 @@ export class World {
   addCarriage(trainId: number, kind: PickupKind): boolean {
     const train = this.getTrain(trainId);
     if (!train) return false;
-    return addCarriage(train, kind, this.rules, this.rng);
+    const added = addCarriage(train, kind, this.rules, this.rng);
+    if (added) noteScore(train, this.state.tick);
+    return added;
   }
 
   spawnTrailer(x?: number, y?: number, kind?: PickupKind): Pickup {
@@ -406,6 +451,7 @@ export class World {
         continue;
       }
       const added = addCarriage(train, p.kind, this.rules, this.rng);
+      if (added) noteScore(train, this.state.tick);
       this.emit({
         type: 'pickup',
         trainId: train.id,

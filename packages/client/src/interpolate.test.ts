@@ -21,6 +21,7 @@ function train(over: Partial<TrainView> = {}): TrainView {
     boosting: false,
     protected: false,
     spawnSeq: 0,
+    roundBest: 0,
     carriages: [{ kind: 'locomotive', x: 90, y: 100, angle: 0 }],
     drones: [],
     ...over,

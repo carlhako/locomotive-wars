@@ -46,6 +46,8 @@ body:not(.playing) #damage-flash {
   min-width: 210px;
 }
 #leaderboard h2 {
+  display: flex;
+  justify-content: space-between;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -76,6 +78,30 @@ body:not(.playing) #damage-flash {
 #leaderboard .row .score {
   color: #ffeb3b;
   font-weight: bold;
+  width: 42px;
+  text-align: right;
+}
+#leaderboard .row .now {
+  color: #9ab;
+  width: 42px;
+  text-align: right;
+}
+#leaderboard h2 .cols {
+  display: flex;
+  color: #888;
+}
+#leaderboard h2 .cols span {
+  width: 42px;
+  text-align: right;
+}
+.bot-tag {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  color: #aaa;
+  font-size: 9px;
+  letter-spacing: 1px;
 }
 #leaderboard .row.me {
   color: #4a9eff;
@@ -564,4 +590,105 @@ body:not(.playing) #damage-flash {
 }
 .overlay.death button:hover:not(:disabled) {
   box-shadow: 0 0 40px rgba(255, 68, 68, 0.8);
+}
+
+/* Round timer, idle warning, and the between-rounds overlay. */
+#round-timer {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  padding: 6px 18px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(100, 200, 255, 0.3);
+  border-radius: 8px;
+  color: #fff;
+  font-family: monospace;
+  font-size: 22px;
+  font-weight: bold;
+  letter-spacing: 2px;
+}
+#round-timer.show {
+  display: block;
+}
+#round-timer.urgent {
+  color: #ff5555;
+  border-color: rgba(255, 85, 85, 0.7);
+  animation: timer-pulse 1s ease-in-out infinite;
+}
+@keyframes timer-pulse {
+  50% {
+    box-shadow: 0 0 16px rgba(255, 85, 85, 0.7);
+  }
+}
+#idle-warning {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  padding: 8px 18px;
+  background: rgba(60, 20, 0, 0.85);
+  border: 1px solid #ff8800;
+  border-radius: 8px;
+  color: #ffcc66;
+  font-size: 15px;
+  font-weight: bold;
+}
+#idle-warning.show {
+  display: block;
+}
+#round-overlay .subtitle {
+  color: #ffeb3b;
+  min-height: 20px;
+}
+#round-overlay h1 {
+  font-size: 56px;
+}
+.standings-box {
+  max-height: 50vh;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 16px;
+}
+#standings-table {
+  border-collapse: collapse;
+  font-family: monospace;
+  font-size: 14px;
+  min-width: 360px;
+}
+#standings-table th {
+  color: #888;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: right;
+  padding: 4px 10px;
+}
+#standings-table td {
+  text-align: right;
+  padding: 3px 10px;
+  color: #ddd;
+}
+#standings-table .name {
+  text-align: left;
+}
+#standings-table .rank {
+  color: #888;
+}
+#standings-table tr.winner td {
+  color: #ffeb3b;
+  font-weight: bold;
+}
+#standings-table tr.me td {
+  background: rgba(74, 158, 255, 0.15);
+  color: #4a9eff;
+}
+#round-countdown {
+  margin-top: 16px;
+  font-size: 18px;
+  letter-spacing: 2px;
 }

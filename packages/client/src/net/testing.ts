@@ -41,6 +41,7 @@ export function makeOwn(over: Partial<OwnTrain> = {}): OwnTrain {
     fm: 100,
     fl: 0,
     sq: 0,
+    rb: 1,
     cs: [],
     dn: [],
     ...over,

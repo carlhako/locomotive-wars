@@ -3,26 +3,31 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   clamp,
+  CLOSE_KICKED,
   decodeClientMessage,
   encodeMessage,
-  INTERP_MS,
   MAX_CLIENT_MESSAGE_BYTES,
   OVERVIEW_RATE,
   PROTOCOL_VERSION,
   sanitizeName,
-  SNAPSHOT_RATE,
-  VIEW_RADIUS,
   World,
 } from '@lw/shared';
-import type { ClientMessage, ServerMessage, SimEvent, WorldOptions } from '@lw/shared';
+import type { ClientMessage, RoundMsg, ServerMessage, SimEvent, WorldOptions } from '@lw/shared';
 import { WebSocketServer } from 'ws';
 import type { RawData, WebSocket } from 'ws';
-import { BOT_COUNT, maintainBots } from './bots.ts';
+import { IdleTracker, isFull } from './admission.ts';
+import { defaultConfig, IDLE_WARN_SEC } from './config.ts';
+import type { ServerConfig } from './config.ts';
 import { createHttpHandler } from './http.ts';
 import { selectEvents, selectVisible } from './interest.ts';
+import type { Visible } from './interest.ts';
 import { FixedStepLoop } from './loop.ts';
+import { BotPopulation } from './population.ts';
+import { RoundClock } from './rounds.ts';
 import { Session } from './sessions.ts';
 import { buildOverview, buildSnapshot } from './snapshot.ts';
+import { buildLeaderboard, buildResult, rankOf, rankTrains, standingRows } from './standings.ts';
+import type { RoundResult } from './standings.ts';
 
 /** A client that has not said hello within this long is dropped. */
 const HELLO_TIMEOUT_MS = 10_000;
@@ -32,45 +37,69 @@ const MAX_BUFFERED_BYTES = 512 * 1024;
 const CLOSE_POLICY = 1008;
 
 export interface GameServerOptions {
-  /** TCP port; 0 picks a free one. */
-  port: number;
   host?: string;
   /** Directory holding the built client. */
   clientDir: string;
-  /** Bot trains kept in the world. */
-  botCount?: number;
+  /** Operator settings. Default: every setting at its default. */
+  config?: ServerConfig;
+  /** World options beyond the config's (seed, spawn counts); the config's tick rate and carriage limit win. */
   world?: WorldOptions;
   /** Compress WebSocket messages over 1 KB (`permessage-deflate`). Default off. */
   compress?: boolean;
   log?: (message: string) => void;
+  /** Called once when a round ends, with its final standings (change 07 stores high scores here). */
+  onRoundEnd?: (result: RoundResult) => void;
+}
+
+/** Seed for a round's world, so each round differs but a given server seed repeats. */
+function roundSeed(base: number, roundId: number): number {
+  return (base ^ Math.imul(roundId, 0x9e3779b1)) >>> 0;
 }
 
 /**
  * The game server: one authoritative world stepped at a fixed rate, an HTTP server for the client
- * and health check, and a WebSocket endpoint at `/ws` carrying the real-time protocol.
+ * and health check, and a WebSocket endpoint at `/ws` carrying the real-time protocol. Play runs
+ * in timed rounds (see `RoundClock`); with no humans connected the world is paused.
  */
 export class GameServer {
   readonly world: World;
   readonly loop: FixedStepLoop;
+  readonly config: ServerConfig;
+  readonly rounds: RoundClock;
   private readonly http: Server;
   private readonly wss: WebSocketServer;
   private readonly sessions = new Set<Session>();
-  private readonly botCount: number;
+  private readonly population: BotPopulation;
   private readonly log: (message: string) => void;
   private readonly snapEvery: number;
   private readonly overviewEvery: number;
   private readonly stepMs: number;
+  private readonly idleWarnTicks: number;
+  private readonly idleKickTicks: number;
+  /** Loop ticks since start. Unlike the world's tick, it keeps counting while the world is paused. */
+  private serverTick = 0;
+  /** The last `roundEnd`, as sent, for players who join during the intermission. */
+  private lastRoundEnd: string | null = null;
   /** Events since the last snapshot was sent. */
   private events: SimEvent[] = [];
 
   constructor(private readonly opts: GameServerOptions) {
+    const config = opts.config ?? defaultConfig();
+    this.config = config;
     this.log = opts.log ?? ((m) => console.log(m));
-    this.botCount = opts.botCount ?? BOT_COUNT;
-    this.world = new World(opts.world);
-    const rate = this.world.options.tickRate;
+    this.world = new World({
+      ...opts.world,
+      tickRate: config.tickRate,
+      maxCarriages: config.maxCarriages,
+    });
+    const rate = config.tickRate;
     this.stepMs = 1000 / rate;
-    this.snapEvery = Math.max(1, Math.round(rate / SNAPSHOT_RATE));
+    this.snapEvery = Math.max(1, Math.round(rate / config.snapshotRate));
     this.overviewEvery = Math.max(1, Math.round(rate / OVERVIEW_RATE));
+    this.idleWarnTicks = Math.max(0, config.idleKickSec - IDLE_WARN_SEC) * rate;
+    this.idleKickTicks = config.idleKickSec * rate;
+    this.rounds = new RoundClock(config.roundLengthSec * rate, config.intermissionSec * rate);
+    this.population = new BotPopulation(this.world, config.bots, rate);
 
     this.loop = new FixedStepLoop({
       tickRate: rate,
@@ -85,6 +114,8 @@ export class GameServer {
           humans: this.humans,
           bots: this.world.state.trains.filter((t) => t.controller === 'bot').length,
           tick: this.world.state.tick,
+          phase: this.rounds.phase,
+          round: this.rounds.roundId,
         }),
       }),
     );
@@ -103,19 +134,18 @@ export class GameServer {
     });
   }
 
-  /** Connected players that have joined. */
+  /** Connected players that have joined, including any waiting out an intermission. */
   get humans(): number {
     let n = 0;
-    for (const s of this.sessions) if (s.trainId !== null) n += 1;
+    for (const s of this.sessions) if (s.joined) n += 1;
     return n;
   }
 
   /** Starts listening and stepping the world. Resolves with the port in use. */
   listen(): Promise<number> {
-    maintainBots(this.world, this.botCount);
     return new Promise((resolve, reject) => {
       this.http.once('error', reject);
-      this.http.listen(this.opts.port, this.opts.host, () => {
+      this.http.listen(this.config.port, this.opts.host, () => {
         this.http.off('error', reject);
         this.loop.start();
         resolve((this.http.address() as AddressInfo).port);
@@ -137,7 +167,7 @@ export class GameServer {
 
   /** Server time in milliseconds: the tick's time plus the real time since it was due. */
   serverTimeMs(): number {
-    return this.world.state.tick * this.stepMs + this.loop.sinceLastStepMs();
+    return this.serverTick * this.stepMs + this.loop.sinceLastStepMs();
   }
 
   // ===== Connections =====
@@ -146,7 +176,7 @@ export class GameServer {
     const session = new Session(ws);
     this.sessions.add(session);
     const helloTimer = setTimeout(() => {
-      if (session.trainId === null) ws.close(CLOSE_POLICY, 'no hello');
+      if (!session.joined) ws.close(CLOSE_POLICY, 'no hello');
     }, HELLO_TIMEOUT_MS);
 
     ws.on('message', (data, isBinary) => {
@@ -180,7 +210,7 @@ export class GameServer {
   private handle(session: Session, msg: ClientMessage): void {
     switch (msg.t) {
       case 'hello': {
-        if (session.trainId !== null) {
+        if (session.joined) {
           this.malformed(session);
           return;
         }
@@ -189,11 +219,21 @@ export class GameServer {
           session.ws.close();
           return;
         }
+        if (isFull(this.humans, this.config.maxPlayers)) {
+          this.send(session.ws, {
+            t: 'reject',
+            reason: 'full',
+            humans: this.humans,
+            max: this.config.maxPlayers,
+          });
+          session.ws.close();
+          return;
+        }
         this.join(session, msg.name);
         return;
       }
       case 'in': {
-        if (session.trainId === null) {
+        if (!session.joined) {
           this.malformed(session);
           return;
         }
@@ -210,7 +250,7 @@ export class GameServer {
         return;
       }
       case 'ping': {
-        if (session.trainId === null) {
+        if (!session.joined) {
           this.malformed(session);
           return;
         }
@@ -222,89 +262,247 @@ export class GameServer {
 
   private join(session: Session, rawName: string): void {
     const name = sanitizeName(rawName);
-    const train = this.world.addTrain({ name, controller: 'human' });
-    session.trainId = train.id;
+    session.joined = true;
     session.name = name;
+    // The train id is promised now; the train itself exists once a round is playing.
+    session.reservedId = this.world.newId();
+    const config = this.config;
     this.send(session.ws, {
       t: 'welcome',
       v: PROTOCOL_VERSION,
-      id: train.id,
-      tickRate: this.world.options.tickRate,
-      snapRate: SNAPSHOT_RATE,
+      id: session.reservedId,
+      tickRate: config.tickRate,
+      snapRate: config.snapshotRate,
       mapSize: this.world.rules.size,
-      interpMs: INTERP_MS,
+      interpMs: Math.round((2 * 1000) / config.snapshotRate),
+      roundLengthSec: config.roundLengthSec,
+      intermissionSec: config.intermissionSec,
+      idleKickSec: config.idleKickSec,
     });
-    this.log(`${name} joined as train ${train.id} (${this.humans} human(s))`);
+    if (this.rounds.phase === 'idle') {
+      // The first human wakes the server: a fresh round starts, and the broadcast reaches them.
+      this.startRound();
+    } else {
+      if (this.rounds.phase === 'playing') this.spawn(session);
+      this.send(session.ws, this.roundMessage());
+      if (this.rounds.phase === 'intermission' && this.lastRoundEnd) {
+        this.sendText(session.ws, this.lastRoundEnd);
+      }
+    }
+    this.log(`${name} joined as train ${session.reservedId} (${this.humans} human(s))`);
   }
 
   private leave(session: Session): void {
-    if (session.trainId === null) return;
-    this.world.removeTrain(session.trainId, { drop: true });
-    this.log(`${session.name} left (${this.humans} human(s))`);
+    if (!session.joined) return;
+    if (session.trainId !== null) this.world.removeTrain(session.trainId, { drop: true });
     session.trainId = null;
+    session.joined = false;
+    this.log(`${session.name} left (${this.humans} human(s))`);
+    if (this.humans === 0 && this.rounds.phase !== 'idle') {
+      this.rounds.stop();
+      this.log('no players left; world paused');
+    }
+  }
+
+  /** Puts a joined session's train into the world. */
+  private spawn(session: Session): void {
+    const train = this.world.addTrain({
+      id: session.reservedId ?? undefined,
+      name: session.name,
+      controller: 'human',
+    });
+    session.trainId = train.id;
+    session.idle = new IdleTracker(train.input);
+  }
+
+  // ===== Rounds =====
+
+  private roundMessage(): RoundMsg {
+    const phase = this.rounds.phase === 'intermission' ? 'intermission' : 'playing';
+    return {
+      t: 'round',
+      phase,
+      roundId: this.rounds.roundId,
+      endsAt: (this.serverTick + this.rounds.ticksLeft) * this.stepMs,
+    };
+  }
+
+  /** Begins a round: excess bots go, the world resets, waiting players spawn, everyone is told. */
+  private startRound(): void {
+    this.population.trimExcess(this.humans);
+    this.rounds.start();
+    this.world.resetForRound(roundSeed(this.world.options.seed, this.rounds.roundId));
+    this.events = [];
+    this.lastRoundEnd = null;
+    for (const s of this.sessions) {
+      if (s.joined && s.trainId === null) this.spawn(s);
+    }
+    this.broadcast(this.roundMessage());
+    this.log(`round ${this.rounds.roundId} started`);
+  }
+
+  /** Freezes the world, announces the standings, and hands them to the round-end hook. */
+  private endRound(): void {
+    const result = buildResult(this.rounds.roundId, rankTrains(this.world.state.trains));
+    const round = this.roundMessage();
+    this.lastRoundEnd = encodeMessage({
+      t: 'roundEnd',
+      roundId: result.roundId,
+      standings: standingRows(result),
+      winnerId: result.winnerId,
+      nextRoundAt: round.endsAt,
+    });
+    this.broadcast(round);
+    for (const s of this.sessions) {
+      if (s.joined) this.sendText(s.ws, this.lastRoundEnd);
+    }
+    const winner = result.standings[0];
+    this.log(
+      `round ${result.roundId} ended` +
+        (winner ? `: ${winner.name} won with ${winner.roundBest}` : ''),
+    );
+    try {
+      this.opts.onRoundEnd?.(result);
+    } catch (e) {
+      this.log(`onRoundEnd failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   // ===== The tick =====
 
-  private tick(): void {
+  /**
+   * Runs one server tick. The loop calls this at the tick rate; tests stop the loop and call it
+   * directly to run rounds faster than real time.
+   */
+  tick(): void {
+    this.serverTick += 1;
+    const phase = this.rounds.phase;
+    if (phase === 'playing') this.tickPlaying();
+    else if (phase === 'intermission') this.dropInputs();
+    if (phase !== 'idle') {
+      const next = this.rounds.tick();
+      if (next === 'intermission') this.endRound();
+      else if (next === 'playing') this.startRound();
+    }
+
+    if (this.serverTick % this.snapEvery === 0) {
+      this.sendSnapshots(this.serverTick);
+      this.events = [];
+    }
+    if (this.serverTick % this.overviewEvery === 0) this.sendOverviews();
+  }
+
+  private tickPlaying(): void {
     const world = this.world;
     // A destroyed player gets a fresh starter train at the start of the next tick.
     for (const t of world.state.trains) {
       if (!t.alive && t.controller === 'human') world.respawnTrain(t.id);
     }
-    maintainBots(world, this.botCount);
+    this.population.update(this.humans);
     for (const s of this.sessions) {
-      if (s.trainId === null || !s.pending) continue;
-      world.setInput(s.trainId, s.pending.input);
-      s.ackSeq = s.pending.seq;
-      s.pending = null;
+      if (s.trainId === null) continue;
+      if (s.pending) {
+        world.setInput(s.trainId, s.pending.input);
+        s.ackSeq = s.pending.seq;
+        if (s.idle?.observe(s.pending.input) && s.idle.clearWarning()) {
+          this.send(s.ws, { t: 'idleClear' });
+        }
+        s.pending = null;
+      }
+      this.checkIdle(s);
     }
     for (const e of world.step()) this.events.push(e);
+  }
 
-    const tick = world.state.tick;
-    if (tick % this.snapEvery === 0) {
-      this.sendSnapshots(tick);
-      this.events = [];
+  /** The world is frozen between rounds, so input is thrown away. */
+  private dropInputs(): void {
+    for (const s of this.sessions) s.pending = null;
+  }
+
+  private checkIdle(s: Session): void {
+    if (!s.idle || s.ws.readyState !== s.ws.OPEN) return;
+    const action = s.idle.tick(this.idleWarnTicks, this.idleKickTicks);
+    if (action === 'warn') {
+      this.send(s.ws, { t: 'idleWarn', secondsLeft: IDLE_WARN_SEC });
+    } else if (action === 'kick') {
+      this.log(`${s.name} kicked for inactivity`);
+      this.send(s.ws, { t: 'kicked', reason: 'idle' });
+      s.ws.close(CLOSE_KICKED, 'idle');
     }
-    if (tick % this.overviewEvery === 0) this.sendOverviews();
   }
 
   private sendSnapshots(tick: number): void {
     const world = this.world;
     const size = world.rules.size;
+    const radius = this.config.viewRadius;
     const serverTimeMs = tick * this.stepMs;
     for (const s of this.sessions) {
-      if (s.trainId === null || !canSend(s.ws)) continue;
-      const own = world.getTrain(s.trainId);
-      if (!own) continue;
-      const visible = selectVisible(world, own.x, own.y, VIEW_RADIUS, own.id);
+      if (!s.joined || !canSend(s.ws)) continue;
+      const own = s.trainId === null ? undefined : world.getTrain(s.trainId);
+      if (!own) {
+        // Waiting for the next round: an empty snapshot keeps the connection and clock alive.
+        this.send(
+          s.ws,
+          buildSnapshot({
+            tick: world.state.tick,
+            serverTimeMs,
+            ack: s.ackSeq,
+            own: undefined,
+            visible: EMPTY_VISIBLE,
+            events: [],
+          }),
+        );
+        continue;
+      }
+      const visible = selectVisible(world, own.x, own.y, radius, own.id);
       const meta = s.meta.diff([own, ...visible.trains]);
       if (meta) this.send(s.ws, { t: 'meta', trains: meta.trains, gone: meta.gone });
       this.send(
         s.ws,
         buildSnapshot({
-          tick,
+          tick: world.state.tick,
           serverTimeMs,
           ack: s.ackSeq,
           own,
           visible,
-          events: selectEvents(this.events, own.x, own.y, VIEW_RADIUS, own.id, size),
+          events: selectEvents(this.events, own.x, own.y, radius, own.id, size),
         }),
       );
     }
   }
 
   private sendOverviews(): void {
-    const text = encodeMessage(buildOverview(this.world.state.trains));
+    const trains = this.world.state.trains;
+    const ranked = rankTrains(trains);
+    const base = buildOverview(trains, buildLeaderboard(ranked));
     for (const s of this.sessions) {
-      if (s.trainId !== null && canSend(s.ws)) s.ws.send(text);
+      if (s.trainId === null || !canSend(s.ws)) continue;
+      s.ws.send(encodeMessage({ ...base, rk: rankOf(ranked, s.trainId) }));
     }
   }
 
+  private broadcast(msg: ServerMessage): void {
+    const text = encodeMessage(msg);
+    for (const s of this.sessions) if (s.joined) this.sendText(s.ws, text);
+  }
+
   private send(ws: WebSocket, msg: ServerMessage): void {
-    if (ws.readyState === ws.OPEN) ws.send(encodeMessage(msg));
+    this.sendText(ws, encodeMessage(msg));
+  }
+
+  /** Sends an already-encoded message, whatever the socket's backlog: these are small and not skippable. */
+  private sendText(ws: WebSocket, text: string): void {
+    if (ws.readyState === ws.OPEN) ws.send(text);
   }
 }
+
+const EMPTY_VISIBLE: Visible = {
+  trains: [],
+  enemies: [],
+  trailers: [],
+  drops: [],
+  projectiles: [],
+};
 
 function canSend(ws: WebSocket): boolean {
   return ws.readyState === ws.OPEN && ws.bufferedAmount < MAX_BUFFERED_BYTES;

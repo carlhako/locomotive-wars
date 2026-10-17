@@ -1,4 +1,5 @@
 import type { WorldView } from '@lw/shared';
+import type { RoundStatus } from '../source.ts';
 
 function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
@@ -12,14 +13,38 @@ export interface HudModel {
   hullPct: number;
   /** 0 to 100. */
   fuelPct: number;
-  carriages: number;
+  /** Live score: carriages behind the locomotive. */
+  length: number;
+  /** The longest the train has been this round. */
+  roundBest: number;
   /** True while the local train is alive and crossing its own trail. */
   bridge: boolean;
   /** The living boss, if any. */
   boss: { name: string; pct: number } | null;
+  /** The round clock while playing: `m:ss`, `urgent` in the final 10 seconds. */
+  timer: { text: string; urgent: boolean } | null;
 }
 
-export function hudModel(view: WorldView): HudModel {
+/** Final seconds of a round during which the timer is highlighted. */
+const URGENT_SECONDS = 10;
+
+/** Whole seconds shown as `m:ss`, rounding up so `0:00` only appears at the very end. */
+export function formatTimer(secondsLeft: number): string {
+  const total = Math.max(0, Math.ceil(secondsLeft));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+export function timerModel(round: RoundStatus | null | undefined): HudModel['timer'] {
+  if (!round || round.phase !== 'playing') return null;
+  return {
+    text: formatTimer(round.secondsLeft),
+    urgent: Math.ceil(round.secondsLeft) <= URGENT_SECONDS,
+  };
+}
+
+export function hudModel(view: WorldView, round?: RoundStatus | null): HudModel {
   const boss = view.enemies.find((e) => e.kind === 'boss');
   const bossInfo = boss
     ? {
@@ -28,17 +53,36 @@ export function hudModel(view: WorldView): HudModel {
       }
     : null;
   const local = view.trains.find((t) => t.id === view.localId);
+  const timer = timerModel(round);
   if (!local) {
-    return { hasLocal: false, hullPct: 0, fuelPct: 0, carriages: 0, bridge: false, boss: bossInfo };
+    return {
+      hasLocal: false,
+      hullPct: 0,
+      fuelPct: 0,
+      length: 0,
+      roundBest: 0,
+      bridge: false,
+      boss: bossInfo,
+      timer,
+    };
   }
+  const length = Math.max(0, local.carriages.length - 1);
   return {
     hasLocal: true,
     hullPct: clamp((local.hp / local.maxHp) * 100, 0, 100),
     fuelPct: clamp((local.fuel / local.fuelMax) * 100, 0, 100),
-    carriages: local.carriages.length,
+    length,
+    // The server's figure can trail the live length by a snapshot.
+    roundBest: Math.max(local.roundBest, length),
     bridge: local.alive && local.bridge,
     boss: bossInfo,
+    timer,
   };
+}
+
+/** The banner shown while an inactivity kick is coming. */
+export function idleWarningText(secondsLeft: number): string {
+  return `Still there? Move or you will be kicked in ${Math.max(0, secondsLeft)}s`;
 }
 
 function byId(id: string): HTMLElement {
@@ -47,9 +91,12 @@ function byId(id: string): HTMLElement {
   return el;
 }
 
-/** Writes a `HudModel` into the stats panel, boss bar, and bridge indicator. */
+/** Writes a `HudModel` into the stats panel, round timer, boss bar, and bridge indicator. */
 export class Hud {
-  private readonly carriages = byId('carriages');
+  private readonly length = byId('length');
+  private readonly roundBest = byId('round-best');
+  private readonly timer = byId('round-timer');
+  private readonly idle = byId('idle-warning');
   private readonly hpBar = byId('hp');
   private readonly hpVal = byId('hp-val');
   private readonly fuelBar = byId('fuel');
@@ -59,10 +106,16 @@ export class Hud {
   private readonly bossHp = byId('boss-hp');
   private readonly bridge = byId('bridge-indicator');
 
-  update(view: WorldView): void {
-    const m = hudModel(view);
+  update(view: WorldView, round?: RoundStatus | null, idleSeconds?: number | null): void {
+    const m = hudModel(view, round);
+    this.timer.classList.toggle('show', m.timer !== null);
+    this.timer.classList.toggle('urgent', m.timer?.urgent ?? false);
+    if (m.timer) this.timer.textContent = m.timer.text;
+    this.idle.classList.toggle('show', idleSeconds != null);
+    if (idleSeconds != null) this.idle.textContent = idleWarningText(idleSeconds);
     if (m.hasLocal) {
-      this.carriages.textContent = String(m.carriages);
+      this.length.textContent = String(m.length);
+      this.roundBest.textContent = String(m.roundBest);
       this.hpBar.style.width = `${m.hullPct}%`;
       this.hpVal.textContent = `${Math.floor(m.hullPct)}%`;
       this.fuelBar.style.width = `${m.fuelPct}%`;

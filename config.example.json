@@ -1,0 +1,12 @@
+{
+  "port": 8080,
+  "maxPlayers": 16,
+  "roundLengthSec": 600,
+  "intermissionSec": 20,
+  "idleKickSec": 60,
+  "bots": { "fillTo": 12, "min": 0, "max": 10 },
+  "maxCarriages": 150,
+  "tickRate": 30,
+  "snapshotRate": 15,
+  "viewRadius": 1600
+}

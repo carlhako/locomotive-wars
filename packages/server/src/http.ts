@@ -7,6 +7,10 @@ export interface Health {
   humans: number;
   bots: number;
   tick: number;
+  /** `idle` (no humans, world paused), `playing`, or `intermission`. */
+  phase: string;
+  /** Id of the current or most recent round; 0 before the first. */
+  round: number;
 }
 
 export interface HttpOptions {

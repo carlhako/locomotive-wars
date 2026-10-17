@@ -43,6 +43,12 @@ export interface TrainView {
   protected: boolean;
   /** Changes each time the train respawns, so interpolation never spans a respawn. */
   spawnSeq: number;
+  /**
+   * The longest this train has been this round (carriages behind the locomotive). Known for the
+   * local train and in offline play; 0 for other trains on the network, whose ranks come from
+   * the server's leaderboard.
+   */
+  roundBest: number;
   /** Index 0 is the locomotive. */
   carriages: CarriageView[];
   /** Orbit angle of each counter-drone around the head. */
@@ -129,6 +135,7 @@ export function viewFromWorld(world: World, localId: number): WorldView {
     boosting: t.boosting,
     protected: t.protectedFor > 0,
     spawnSeq: t.spawnSeq,
+    roundBest: t.roundBest,
     carriages: t.carriages.map((c) => ({ kind: c.kind, x: c.x, y: c.y, angle: c.angle })),
     drones: t.drones.map((d) => d.angle),
   }));

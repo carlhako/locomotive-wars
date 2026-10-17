@@ -22,6 +22,7 @@ const snapshot: SnapshotMsg = {
     fm: 100,
     fl: 2,
     sq: 3,
+    rb: 12,
     cs: [90, 200, 72, 200],
     dn: [0.5],
   },
@@ -64,9 +65,12 @@ const serverMessages: ServerMessage[] = [
     snapRate: 15,
     mapSize: 6000,
     interpMs: 133,
+    roundLengthSec: 600,
+    intermissionSec: 20,
+    idleKickSec: 60,
   },
   { t: 'reject', reason: 'version' },
-  { t: 'reject', reason: 'full' },
+  { t: 'reject', reason: 'full', humans: 16, max: 16 },
   { t: 'reject', reason: 'malformed' },
   {
     t: 'meta',
@@ -75,8 +79,32 @@ const serverMessages: ServerMessage[] = [
   },
   snapshot,
   { ...snapshot, me: null, tr: [], en: [], tl: [], dr: [], pr: [], ev: [] },
-  { t: 'ov', h: [[4, 10, 20, '#fff', 'Casey']] },
+  {
+    t: 'ov',
+    h: [[4, 10, 20, '#fff', 'Casey']],
+    lb: [
+      [4, 'Casey', 12, 5, 0],
+      [9, 'IronWolf', 9, 9, 1],
+    ],
+    rk: 1,
+  },
   { t: 'pong', c: 99, st: 1234.5 },
+  { t: 'round', phase: 'playing', roundId: 3, endsAt: 600000 },
+  { t: 'round', phase: 'intermission', roundId: 3, endsAt: 620000 },
+  {
+    t: 'roundEnd',
+    roundId: 3,
+    standings: [
+      [4, 'Casey', 0, 40, 2],
+      [9, 'IronWolf', 1, 31, 0],
+    ],
+    winnerId: 4,
+    nextRoundAt: 620000,
+  },
+  { t: 'roundEnd', roundId: 4, standings: [], winnerId: null, nextRoundAt: 1000 },
+  { t: 'idleWarn', secondsLeft: 10 },
+  { t: 'idleClear' },
+  { t: 'kicked', reason: 'idle' },
 ];
 
 describe('message round trips', () => {
@@ -132,7 +160,11 @@ describe('decodeServerMessage', () => {
     ['a reject with a bad reason', '{"t":"reject","reason":"because"}'],
     [
       'a welcome missing the map size',
-      '{"t":"welcome","v":1,"id":1,"tickRate":30,"snapRate":15,"interpMs":133}',
+      '{"t":"welcome","v":1,"id":1,"tickRate":30,"snapRate":15,"interpMs":133,"roundLengthSec":600,"intermissionSec":20,"idleKickSec":60}',
+    ],
+    [
+      'a welcome missing the round settings',
+      '{"t":"welcome","v":3,"id":1,"tickRate":30,"snapRate":15,"mapSize":6000,"interpMs":133}',
     ],
     ['a snapshot without events', JSON.stringify({ ...snapshot, ev: undefined })],
     ['a snapshot with a short train row', JSON.stringify({ ...snapshot, tr: [[1, 2, 3]] })],
@@ -152,7 +184,16 @@ describe('decodeServerMessage', () => {
       'a snapshot with an odd carriage list',
       JSON.stringify({ ...snapshot, me: { ...snapshot.me, cs: [1, 2, 3] } }),
     ],
-    ['an overview row without a name', '{"t":"ov","h":[[1,2,3,"#fff"]]}'],
+    ['an overview row without a name', '{"t":"ov","h":[[1,2,3,"#fff"]],"lb":[],"rk":0}'],
+    ['an overview without a leaderboard', '{"t":"ov","h":[],"rk":0}'],
+    ['an overview with a bad leaderboard row', '{"t":"ov","h":[],"lb":[[1,"a",2,3,7]],"rk":0}'],
+    ['a round with an unknown phase', '{"t":"round","phase":"idle","roundId":1,"endsAt":0}'],
+    [
+      'a roundEnd with a bad standings row',
+      '{"t":"roundEnd","roundId":1,"standings":[[1,"a",2,3,4]],"winnerId":1,"nextRoundAt":0}',
+    ],
+    ['an idleWarn without a count', '{"t":"idleWarn"}'],
+    ['a kicked with another reason', '{"t":"kicked","reason":"cheating"}'],
     [
       'a meta with a bad controller',
       '{"t":"meta","trains":[{"id":1,"name":"a","color":"c","ctl":"cat","kinds":[]}],"gone":[]}',

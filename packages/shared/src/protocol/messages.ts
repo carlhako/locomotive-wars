@@ -8,7 +8,7 @@ import type {
 } from '../sim/types.ts';
 
 /** Bumped on any incompatible change to the message shapes. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * The wire protocol, JSON for the beta. Keys are short and entity lists are arrays of numbers to
@@ -102,6 +102,10 @@ export interface WelcomeMsg {
   snapRate: number;
   mapSize: number;
   interpMs: number;
+  /** Operator settings the client shows: round and intermission length, idle kick (0 = off). */
+  roundLengthSec: number;
+  intermissionSec: number;
+  idleKickSec: number;
 }
 
 export type RejectReason = 'version' | 'full' | 'malformed';
@@ -109,7 +113,54 @@ export type RejectReason = 'version' | 'full' | 'malformed';
 export interface RejectMsg {
   t: 'reject';
   reason: RejectReason;
+  /** `full` only: connected humans and the limit. */
+  humans?: number;
+  max?: number;
 }
+
+export type RoundPhase = 'playing' | 'intermission';
+
+/** The round phase on join and at every change. `endsAt` is server time in ms (the `pong.st` clock). */
+export interface RoundMsg {
+  t: 'round';
+  phase: RoundPhase;
+  roundId: number;
+  endsAt: number;
+}
+
+/** `[id, name, isBot 0/1, roundBest, kills]`, in rank order. */
+export type StandingRow = [number, string, 0 | 1, number, number];
+
+/** Sent once when a round ends, and to anyone who joins during the intermission. */
+export interface RoundEndMsg {
+  t: 'roundEnd';
+  roundId: number;
+  standings: StandingRow[];
+  /** Id of the winning train, or null for an empty round. */
+  winnerId: number | null;
+  /** Server time in ms at which the next round starts. */
+  nextRoundAt: number;
+}
+
+/** The server is about to kick the session for inactivity. */
+export interface IdleWarnMsg {
+  t: 'idleWarn';
+  secondsLeft: number;
+}
+
+/** The session did something; the idle warning is withdrawn. */
+export interface IdleClearMsg {
+  t: 'idleClear';
+}
+
+/** Sent just before the server closes the socket (close code 4000). */
+export interface KickedMsg {
+  t: 'kicked';
+  reason: 'idle';
+}
+
+/** Close code the server uses after `kicked`. */
+export const CLOSE_KICKED = 4000;
 
 /** Slow-changing facts about one train: sent when first seen and whenever they change. */
 export interface TrainMeta {
@@ -168,6 +219,8 @@ export interface OwnTrain {
   fl: number;
   /** Spawn counter, as in a train row. */
   sq: number;
+  /** Round best: the longest this train has been (carriages behind the locomotive) this round. */
+  rb: number;
   /** Carriage x/y pairs from the locomotive back. */
   cs: number[];
   /** Drone orbit angles. */
@@ -197,9 +250,16 @@ export interface SnapshotMsg {
  */
 export type OverviewRow = [number, number, number, string, string];
 
+/** `[id, name, roundBest, score, isBot 0/1]`. */
+export type LeaderRow = [number, string, number, number, 0 | 1];
+
 export interface OverviewMsg {
   t: 'ov';
   h: OverviewRow[];
+  /** The top 10 by round best, in rank order. */
+  lb: LeaderRow[];
+  /** The recipient's own rank, 1-based; 0 when it has none. */
+  rk: number;
 }
 
 export interface PongMsg {
@@ -210,7 +270,18 @@ export interface PongMsg {
   st: number;
 }
 
-export type ServerMessage = WelcomeMsg | RejectMsg | MetaMsg | SnapshotMsg | OverviewMsg | PongMsg;
+export type ServerMessage =
+  | WelcomeMsg
+  | RejectMsg
+  | MetaMsg
+  | SnapshotMsg
+  | OverviewMsg
+  | PongMsg
+  | RoundMsg
+  | RoundEndMsg
+  | IdleWarnMsg
+  | IdleClearMsg
+  | KickedMsg;
 
 // ===== Encoding =====
 
@@ -287,7 +358,7 @@ function numRows(v: unknown, minLength: number): boolean {
 
 function isOwnTrain(v: unknown): v is OwnTrain {
   if (!isObject(v)) return false;
-  const nums = [v.x, v.y, v.a, v.hp, v.mh, v.f, v.fm, v.fl, v.sq];
+  const nums = [v.x, v.y, v.a, v.hp, v.mh, v.f, v.fm, v.fl, v.sq, v.rb];
   return (
     nums.every(isNum) &&
     Array.isArray(v.cs) &&
@@ -295,6 +366,28 @@ function isOwnTrain(v: unknown): v is OwnTrain {
     v.cs.every(isNum) &&
     Array.isArray(v.dn) &&
     v.dn.every(isNum)
+  );
+}
+
+function isLeaderRow(r: unknown): r is LeaderRow {
+  return (
+    Array.isArray(r) &&
+    isInt(r[0]) &&
+    typeof r[1] === 'string' &&
+    isNum(r[2]) &&
+    isNum(r[3]) &&
+    isFlag(r[4])
+  );
+}
+
+function isStandingRow(r: unknown): r is StandingRow {
+  return (
+    Array.isArray(r) &&
+    isInt(r[0]) &&
+    typeof r[1] === 'string' &&
+    isFlag(r[2]) &&
+    isNum(r[3]) &&
+    isNum(r[4])
   );
 }
 
@@ -325,14 +418,20 @@ export function decodeServerMessage(raw: string): ServerMessage | null {
         isNum(m.tickRate) &&
         isNum(m.snapRate) &&
         isNum(m.mapSize) &&
-        isNum(m.interpMs)
+        isNum(m.interpMs) &&
+        isNum(m.roundLengthSec) &&
+        isNum(m.intermissionSec) &&
+        isNum(m.idleKickSec)
       ) {
         return m as unknown as WelcomeMsg;
       }
       return null;
     case 'reject':
       if (m.reason === 'version' || m.reason === 'full' || m.reason === 'malformed') {
-        return { t: 'reject', reason: m.reason };
+        const reject: RejectMsg = { t: 'reject', reason: m.reason };
+        if (isInt(m.humans)) reject.humans = m.humans;
+        if (isInt(m.max)) reject.max = m.max;
+        return reject;
       }
       return null;
     case 'meta':
@@ -373,10 +472,41 @@ export function decodeServerMessage(raw: string): ServerMessage | null {
             isNum(r[2]) &&
             typeof r[3] === 'string' &&
             typeof r[4] === 'string',
-        )
+        ) &&
+        Array.isArray(m.lb) &&
+        m.lb.every(isLeaderRow) &&
+        isInt(m.rk)
       ) {
         return m as unknown as OverviewMsg;
       }
+      return null;
+    case 'round':
+      if (
+        (m.phase === 'playing' || m.phase === 'intermission') &&
+        isInt(m.roundId) &&
+        isNum(m.endsAt)
+      ) {
+        return { t: 'round', phase: m.phase, roundId: m.roundId, endsAt: m.endsAt };
+      }
+      return null;
+    case 'roundEnd':
+      if (
+        isInt(m.roundId) &&
+        Array.isArray(m.standings) &&
+        m.standings.every(isStandingRow) &&
+        (m.winnerId === null || isInt(m.winnerId)) &&
+        isNum(m.nextRoundAt)
+      ) {
+        return m as unknown as RoundEndMsg;
+      }
+      return null;
+    case 'idleWarn':
+      if (isNum(m.secondsLeft)) return { t: 'idleWarn', secondsLeft: m.secondsLeft };
+      return null;
+    case 'idleClear':
+      return { t: 'idleClear' };
+    case 'kicked':
+      if (m.reason === 'idle') return { t: 'kicked', reason: 'idle' };
       return null;
     case 'pong':
       if (isNum(m.c) && isNum(m.st)) return { t: 'pong', c: m.c, st: m.st };

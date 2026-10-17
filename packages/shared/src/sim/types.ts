@@ -109,6 +109,10 @@ export interface TrainState {
   spawnSeq: number;
   /** Trains this train has destroyed since it last spawned. For the kill feed, not score. */
   kills: number;
+  /** Highest live score (carriages behind the locomotive) reached this round. */
+  roundBest: number;
+  /** Tick at which `roundBest` was first reached; breaks ties between equal bests. */
+  roundBestTick: number;
 }
 
 export interface EnemyState {
@@ -252,6 +256,8 @@ export interface WorldOptions {
 export type ResolvedWorldOptions = Required<WorldOptions>;
 
 export interface AddTrainOptions {
+  /** An id from `World.newId()` reserved earlier. Default: a fresh one. */
+  id?: number;
   name?: string;
   color?: string;
   controller?: Controller;

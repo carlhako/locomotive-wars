@@ -24,6 +24,54 @@ npm run dev
 http://localhost:5173, enter a name, and press Play. The client dev server proxies the `/ws` path to
 the game server. To try the client without a server, open http://localhost:5173/?offline.
 
+## Running a server
+
+The server reads its settings from a JSON file: `config.json` in the directory you start it from, or
+the path in the `LW_CONFIG` environment variable. Copy [`config.example.json`](config.example.json)
+(every key at its default) to `config.json` and change what you need; `config.json` is not
+committed. A missing file means all defaults, and a missing key takes its default. Restart the
+server to apply changes.
+
+```bash
+cp config.example.json config.json
+npm run build
+npm start -w @lw/server
+```
+
+The `PORT` environment variable overrides `port`. The server refuses to start, exiting non-zero and
+listing every bad key, when a value has the wrong type or is out of range. An unknown key (a typo
+such as `maxPlayer`) only prints a warning and is ignored.
+
+<!-- config-keys:start -->
+
+| Key               | Default | Allowed                     | Meaning                                                            |
+| ----------------- | ------- | --------------------------- | ------------------------------------------------------------------ |
+| `port`            | `8080`  | 0 to 65535                  | TCP port to listen on                                              |
+| `maxPlayers`      | `16`    | 1 to 100                    | Most human players connected at once; more are refused as full     |
+| `roundLengthSec`  | `600`   | 30 to 7200                  | Length of a round                                                  |
+| `intermissionSec` | `20`    | 5 to 300                    | Pause between rounds, showing the standings                        |
+| `idleKickSec`     | `60`    | `0` (off), or 20 to 3600    | Kick a player who stops steering this long (warned 10 s before)    |
+| `bots.fillTo`     | `12`    | 0 to 100                    | Bots fill the world up to this many trains in all, humans included |
+| `bots.min`        | `0`     | 0 to `bots.max`             | Fewest bots, however many humans are connected                     |
+| `bots.max`        | `10`    | 0 to 100                    | Most bots                                                          |
+| `maxCarriages`    | `150`   | 10 to 500                   | Longest a train can grow, locomotive included                      |
+| `tickRate`        | `30`    | 10 to 60                    | Simulation steps per second                                        |
+| `snapshotRate`    | `15`    | 1 to `tickRate`, divides it | Snapshots sent per client per second                               |
+| `viewRadius`      | `1600`  | 500 to 5000                 | How far from its train a client sees, in world units               |
+
+<!-- config-keys:end -->
+
+The number of bots is `clamp(bots.fillTo - humans, bots.min, bots.max)`. Bots are added one a
+second, are never removed while alive, and are trimmed at the start of the next round. Set
+`bots.fillTo` and `bots.min` to `0` for a server with no bots.
+
+### Rounds
+
+A round lasts `roundLengthSec`, then an intermission of `intermissionSec` shows the final standings
+and the winner (the player whose train reached the greatest length during the round; the player who
+got there first wins a tie). The next round resets the world and every train. With no human
+connected the world is paused, and the next player to join starts a fresh round.
+
 ## Scripts
 
 | Script                       | What it does                                         |

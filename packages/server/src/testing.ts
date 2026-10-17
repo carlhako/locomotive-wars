@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { decodeServerMessage, encodeMessage, PROTOCOL_VERSION, World } from '@lw/shared';
 import type { ClientMessage, ServerMessage, WelcomeMsg } from '@lw/shared';
 import { WebSocket } from 'ws';
+import { parseConfig } from './config.ts';
 import { GameServer } from './server.ts';
 import type { GameServerOptions } from './server.ts';
 
@@ -32,16 +33,20 @@ export function makeClientDir(): { dir: string; secretName: string } {
   return { dir, secretName: 'secret.txt' };
 }
 
+/** Starts a server on a free port. `config` holds config-file keys layered over the defaults. */
 export async function startServer(
-  opts: Partial<GameServerOptions> = {},
+  opts: Omit<Partial<GameServerOptions>, 'config'> & { config?: Record<string, unknown> } = {},
 ): Promise<{ server: GameServer; port: number }> {
   const { dir } = makeClientDir();
+  const { config: override, ...rest } = opts;
+  const parsed = parseConfig({ port: 0, ...override });
+  if (!parsed.ok) throw new Error(`bad test config: ${parsed.errors.join('; ')}`);
   const server = new GameServer({
-    port: 0,
     host: '127.0.0.1',
     clientDir: dir,
     log: () => {},
-    ...opts,
+    ...rest,
+    config: parsed.config,
   });
   const port = await server.listen();
   return { server, port };

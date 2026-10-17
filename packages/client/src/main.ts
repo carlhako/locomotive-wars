@@ -32,7 +32,7 @@ function startOnline(): void {
   join.show();
 
   let joining = false;
-  join.onPlay((name) => {
+  const attempt = (name: string): void => {
     if (joining) return;
     joining = true;
     join.setError('');
@@ -46,7 +46,7 @@ function startOnline(): void {
       onStatus: (status, reason) => {
         // Before the first snapshot the join screen reports problems; after, the overlay does.
         if (document.body.classList.contains('playing'))
-          disconnected.update(status, reason ?? null);
+          disconnected.update(status, reason ?? null, session.fullInfo);
       },
     });
     disconnected.onReconnect(() => session.reconnect());
@@ -62,10 +62,23 @@ function startOnline(): void {
       () => {
         joining = false;
         join.setBusy(false);
-        join.setError(disconnectMessage(session.reason ?? 'closed'));
+        const why = session.reason ?? 'closed';
+        if (why === 'full') {
+          // A full server gets its own screen with a Retry button that joins afresh.
+          join.hide();
+          disconnected.onReconnect(() => {
+            disconnected.hide();
+            join.show();
+            attempt(trimmed);
+          });
+          disconnected.update('disconnected', why, session.fullInfo);
+          return;
+        }
+        join.setError(disconnectMessage(why));
       },
     );
-  });
+  };
+  join.onPlay(attempt);
 }
 
 if (wantsOffline(window.location.search)) startOffline();

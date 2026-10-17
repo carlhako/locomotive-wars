@@ -10,12 +10,15 @@
     <div id="damage-flash"></div>
     <div id="ui">
       <div id="leaderboard" class="panel">
-        <h2>Leaderboard</h2>
+        <h2>
+          <span>Leaderboard</span><span class="cols"><span>Best</span><span>Now</span></span>
+        </h2>
         <div id="leaderboard-rows"></div>
       </div>
       <div id="stats" class="panel">
+        <div class="row"><span class="key">Length</span><span class="val" id="length">1</span></div>
         <div class="row">
-          <span class="key">Carriages</span><span class="val" id="carriages">1</span>
+          <span class="key">Round best</span><span class="val" id="round-best">1</span>
         </div>
         <div class="row">
           <span class="key">Hull</span><span class="val" id="hp-val">100%</span>
@@ -28,6 +31,8 @@
         </div>
         <div class="bar boost"><div id="fuel" style="width: 100%"></div></div>
       </div>
+      <div id="round-timer"></div>
+      <div id="idle-warning"></div>
       <div id="boss-hud">
         <div class="name" id="boss-name"></div>
         <div class="hp-bg"><div class="hp-fg" id="boss-hp" style="width: 100%"></div></div>
@@ -75,8 +80,26 @@
       </form>
       <div id="join-error" role="alert"></div>
     </div>
+    <div id="round-overlay" class="overlay" style="display: none">
+      <h1>ROUND OVER</h1>
+      <div id="round-winner" class="subtitle"></div>
+      <div class="standings-box">
+        <table id="standings-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th class="name">Player</th>
+              <th>Best</th>
+              <th>Kills</th>
+            </tr>
+          </thead>
+          <tbody id="round-standings"></tbody>
+        </table>
+      </div>
+      <p id="round-countdown"></p>
+    </div>
     <div id="disconnect-screen" class="overlay death" style="display: none">
-      <h1>DISCONNECTED</h1>
+      <h1 id="disconnect-title">DISCONNECTED</h1>
       <p id="disconnect-reason"></p>
       <button id="reconnect-btn" type="button">Reconnect</button>
     </div>

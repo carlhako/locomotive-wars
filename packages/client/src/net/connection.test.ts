@@ -50,6 +50,9 @@ const welcome: ServerMessage = {
   snapRate: 15,
   mapSize: 6000,
   interpMs: 133,
+  roundLengthSec: 600,
+  intermissionSec: 20,
+  idleKickSec: 60,
 };
 
 let server: FakeServer;
@@ -236,7 +239,7 @@ describe('NetSession time and events', () => {
   it('knows names of trains outside the view from the overview', () => {
     const session = makeSession();
     online(session);
-    server.say({ t: 'ov', h: [[9, 4000, 4000, '#f00', 'FarAway']] });
+    server.say({ t: 'ov', h: [[9, 4000, 4000, '#f00', 'FarAway']], lb: [], rk: 0 });
     expect([...(session.knownTrains?.() ?? [])]).toContainEqual({
       id: 9,
       name: 'FarAway',
@@ -253,6 +256,8 @@ describe('NetSession time and events', () => {
         [5, 900, 900, '#0f0', 'Casey'],
         [9, 4000, 4000, '#f00', 'FarAway'],
       ],
+      lb: [],
+      rk: 0,
     });
     session.advance(0.016, STILL);
     const map = session.view().minimap;
@@ -328,5 +333,141 @@ describe('NetSession disconnect and reconnect', () => {
     server.drop();
     server.say(snapshot(5000, { ev: [{ type: 'trainLeft', trainId: 1, x: 0, y: 0 }] }));
     expect(session.advance(0.016, STILL)).toEqual([]);
+  });
+});
+
+describe('NetSession rounds', () => {
+  it('reports the round phase and seconds left on the server clock', () => {
+    const session = makeSession();
+    online(session, 1000);
+    // The first snapshot seeds the clock: server time 1000 ms equals the client time now.
+    const now = performance.now();
+    server.say({ t: 'round', phase: 'playing', roundId: 3, endsAt: 1000 + 90_000 });
+    const round = session.round();
+    expect(round).toMatchObject({ phase: 'playing', roundId: 3 });
+    expect(round?.secondsLeft).toBeGreaterThan(89.9);
+    expect(round?.secondsLeft).toBeLessThanOrEqual(90 + (performance.now() - now) / 1000);
+    vi.advanceTimersByTime(30_000);
+    expect(session.round()?.secondsLeft).toBeCloseTo(60, 0);
+  });
+
+  it('is null before any round message', () => {
+    const session = makeSession();
+    online(session);
+    expect(session.round()).toBeNull();
+    expect(session.roundResult()).toBeNull();
+  });
+
+  it('keeps the standings only for the intermission', () => {
+    const session = makeSession();
+    online(session);
+    server.say({ t: 'round', phase: 'intermission', roundId: 1, endsAt: 21_000 });
+    server.say({
+      t: 'roundEnd',
+      roundId: 1,
+      standings: [
+        [9, 'IronWolf', 1, 40, 2],
+        [5, 'Casey', 0, 12, 0],
+      ],
+      winnerId: 9,
+      nextRoundAt: 21_000,
+    });
+    expect(session.roundResult()).toEqual({
+      roundId: 1,
+      winnerId: 9,
+      standings: [
+        { id: 9, name: 'IronWolf', bot: true, best: 40, kills: 2 },
+        { id: 5, name: 'Casey', bot: false, best: 12, kills: 0 },
+      ],
+    });
+    server.say({ t: 'round', phase: 'playing', roundId: 2, endsAt: 600_000 });
+    expect(session.roundResult()).toBeNull();
+  });
+
+  it('does not run the local train ahead of a frozen world', () => {
+    const session = makeSession();
+    online(session);
+    const boost = { ...STILL, boost: true };
+    session.advance(0.016, boost);
+    vi.advanceTimersByTime(300);
+    session.advance(0.016, boost);
+    const moving = session.view().trains.find((t) => t.id === 5)!;
+    expect(moving.x).toBeGreaterThan(1000);
+
+    server.say({ t: 'round', phase: 'intermission', roundId: 1, endsAt: 21_000 });
+    vi.advanceTimersByTime(300);
+    session.advance(0.016, boost);
+    const frozen = session.view().trains.find((t) => t.id === 5)!;
+    expect(frozen.x).toBe(1000);
+  });
+
+  it('builds the board from the overview leaderboard and keeps the own rank', () => {
+    const session = makeSession();
+    online(session);
+    expect(session.board()).toBeNull();
+    server.say({
+      t: 'ov',
+      h: [],
+      lb: [
+        [9, 'IronWolf', 40, 12, 1],
+        [5, 'Casey', 12, 12, 0],
+      ],
+      rk: 2,
+    });
+    expect(session.board()).toEqual({
+      rows: [
+        { id: 9, name: 'IronWolf', best: 40, now: 12, bot: true },
+        { id: 5, name: 'Casey', best: 12, now: 12, bot: false },
+      ],
+      rank: 2,
+    });
+  });
+});
+
+describe('NetSession idle warning and kick', () => {
+  it('counts down from the warning and clears on idleClear', () => {
+    const session = makeSession();
+    online(session);
+    expect(session.idleWarning()).toBeNull();
+    server.say({ t: 'idleWarn', secondsLeft: 10 });
+    expect(session.idleWarning()).toBe(10);
+    vi.advanceTimersByTime(4000);
+    expect(session.idleWarning()).toBe(6);
+    server.say({ t: 'idleClear' });
+    expect(session.idleWarning()).toBeNull();
+  });
+
+  it('ends the session with reason kicked, and the later close does not change it', () => {
+    const session = makeSession();
+    online(session);
+    server.say({ t: 'idleWarn', secondsLeft: 10 });
+    server.say({ t: 'kicked', reason: 'idle' });
+    expect(session.status).toBe('disconnected');
+    expect(session.reason).toBe('kicked');
+    expect(session.idleWarning()).toBeNull();
+    server.drop();
+    expect(session.reason).toBe('kicked');
+    expect(statuses.at(-1)).toEqual(['disconnected', 'kicked']);
+  });
+
+  it('can rejoin after a kick', () => {
+    const session = makeSession();
+    online(session);
+    server.say({ t: 'kicked', reason: 'idle' });
+    session.reconnect();
+    server.open();
+    expect(server.of('hello')).toHaveLength(1);
+    expect(session.status).toBe('connecting');
+  });
+});
+
+describe('NetSession server full', () => {
+  it('rejects with the counts', async () => {
+    const session = makeSession();
+    server.open();
+    server.say({ t: 'reject', reason: 'full', humans: 16, max: 16 });
+    await expect(session.ready).rejects.toThrow('full');
+    expect(session.reason).toBe('full');
+    expect(session.fullInfo).toEqual({ humans: 16, max: 16 });
   });
 });
