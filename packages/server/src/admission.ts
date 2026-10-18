@@ -33,6 +33,7 @@ export class IdleTracker {
       input.turn !== b.turn ||
       input.boost !== b.boost ||
       input.brake !== b.brake ||
+      input.fire !== b.fire ||
       Math.abs(shortAngle(input.aim - b.aim)) > AIM_ACTIVITY;
     if (!meaningful) return false;
     this.base = { ...input };

@@ -30,6 +30,8 @@ export interface TrainInput {
   turn: number;
   boost: boolean;
   brake: boolean;
+  /** Weapon carriages fire while this is on. */
+  fire: boolean;
   /** World-space aim angle in radians. */
   aim: number;
 }

@@ -10,7 +10,7 @@ numbers to keep snapshots small. Binary encoding and delta compression are a lat
 
 ## Versioning
 
-`PROTOCOL_VERSION` (currently `4`) is bumped on any incompatible change to a message. The first
+`PROTOCOL_VERSION` (currently `5`) is bumped on any incompatible change to a message. The first
 message a client sends is `hello` carrying its version; a server that does not speak it replies
 `reject` with reason `version` and closes the socket. The client then tells the player to reload.
 
@@ -35,12 +35,12 @@ above are the defaults, and `welcome` carries the ones in force. The rest are co
 
 ## Client to server
 
-| `t`      | Fields                                                                | Notes                                                                                                |
-| -------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `hello`  | `v` protocol version, `name`                                          | Must be first. The server sanitises the name (`sanitizeName`) and spawns the train.                  |
-| `in`     | `s` sequence, `tr` turn, `b` boost 0/1, `br` brake 0/1, `a` aim (rad) | Sent on change and every 100 ms. `tr` is clamped to [-1, 1]; non-finite numbers are malformed.       |
-| `ping`   | `c` client time (ms)                                                  | Echoed in `pong`.                                                                                    |
-| `hsName` | `token`, `name`                                                       | Names the player's own high score entry. The token comes from `hsEligible`; there is no score field. |
+| `t`      | Fields                                                                              | Notes                                                                                                                       |
+| -------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `hello`  | `v` protocol version, `name`                                                        | Must be first. The server sanitises the name (`sanitizeName`) and spawns the train.                                         |
+| `in`     | `s` sequence, `tr` turn, `b` boost 0/1, `br` brake 0/1, `f` fire 0/1, `a` aim (rad) | Sent on change and every 100 ms. `tr` is clamped to [-1, 1]; non-finite numbers are malformed. Weapons fire while `f` is 1. |
+| `ping`   | `c` client time (ms)                                                                | Echoed in `pong`.                                                                                                           |
+| `hsName` | `token`, `name`                                                                     | Names the player's own high score entry. The token comes from `hsEligible`; there is no score field.                        |
 
 A client never sends a position. Unknown fields are dropped when a message is decoded.
 

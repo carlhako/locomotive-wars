@@ -16,17 +16,16 @@ import {
   ENEMY_DROP_JITTER,
   ENEMY_HIT_RADIUS,
   HEAD_RADIUS,
+  MAX_TRAIN_PROJECTILES,
   PROJECTILE_LIFE,
   RAM_DAMAGE_TO_ENEMY,
   RAM_DAMAGE_TO_TRAIN,
   RAM_RADIUS,
   SPLASH_DAMAGE_FACTOR,
-  WEAPON_ARC,
   WEAPON_MUZZLE_OFFSET,
-  WEAPON_RANGE,
   WEAPONS,
 } from './constants.ts';
-import { segmentCircleHit, shortAngle, wrapAngle, wrapDist, wrapPos } from './math.ts';
+import { segmentCircleHit, wrapAngle, wrapDist, wrapPos } from './math.ts';
 import { damageReductionOf } from './train.ts';
 import type {
   DamageSource,
@@ -233,27 +232,31 @@ function isWeapon(kind: string): kind is WeaponKind {
   return kind === 'mg' || kind === 'missile' || kind === 'laser';
 }
 
-/** True when any living enemy or unprotected other train's head is within `range` of the point. */
-function hostileWithin(world: World, train: TrainState, x: number, y: number, range: number) {
-  const size = world.rules.size;
-  for (const e of world.state.enemies) {
-    if (e.hull > 0 && wrapDist(x, y, e.x, e.y, size) < range) return true;
+/** Projectile kinds fired by weapon carriages (counter-drone shots are not among them). */
+const WEAPON_PROJECTILES: ReadonlySet<ProjectileKind> = new Set(
+  Object.values(WEAPONS).map((w) => w.projectile),
+);
+
+/** Live weapon-carriage projectiles per owning train id, for the projectile budget. */
+export function countWeaponProjectiles(world: World): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const p of world.state.projectiles) {
+    if (p.ownerKind !== 'train' || !WEAPON_PROJECTILES.has(p.kind)) continue;
+    counts.set(p.ownerId, (counts.get(p.ownerId) ?? 0) + 1);
   }
-  for (const t of world.state.trains) {
-    if (t === train || !t.alive || t.protectedFor > 0) continue;
-    if (wrapDist(x, y, t.x, t.y, size) < range) return true;
-  }
-  return false;
+  return counts;
 }
 
 /**
- * Fires each ready weapon carriage along the train's aim angle, provided the aim is inside the
- * carriage's firing arc and a hostile is within range. Cooldowns tick down every tick. A
- * protected train holds fire.
+ * Fires each ready weapon carriage along the train's aim angle while the fire input is on,
+ * whatever the carriage's heading and whether or not anything is in range. Cooldowns tick down
+ * every tick. A protected train holds fire, and a train with `MAX_TRAIN_PROJECTILES` of its
+ * shots in flight waits. `live` holds those counts (see `countWeaponProjectiles`) and is
+ * updated as the train fires.
  */
-export function fireWeapons(world: World, train: TrainState): void {
+export function fireWeapons(world: World, train: TrainState, live: Map<number, number>): void {
   const dt = world.dt;
-  const holding = train.protectedFor > 0;
+  const holding = train.protectedFor > 0 || !train.input.fire;
   const aim = train.input.aim;
   for (let i = 0; i < train.carriages.length; i++) {
     const c = train.carriages[i];
@@ -262,8 +265,9 @@ export function fireWeapons(world: World, train: TrainState): void {
     const timer = Math.max((train.fireTimers[i] ?? 0) - dt, -dt);
     train.fireTimers[i] = timer;
     if (holding || timer > 0) continue;
-    if (Math.abs(shortAngle(aim - c.angle)) > WEAPON_ARC) continue;
-    if (!hostileWithin(world, train, c.x, c.y, WEAPON_RANGE)) continue;
+    const inFlight = live.get(train.id) ?? 0;
+    if (inFlight >= MAX_TRAIN_PROJECTILES) continue;
+    live.set(train.id, inFlight + 1);
     const stats = WEAPONS[c.kind];
     train.fireTimers[i] = timer + 1 / stats.fireRate;
     spawnProjectile(world, {

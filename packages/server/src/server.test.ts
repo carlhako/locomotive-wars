@@ -111,7 +111,7 @@ describe('input', () => {
     const train = trainOf(c.id);
     const start0 = train.angle;
     for (let s = 1; s <= 10; s++) {
-      c.send({ t: 'in', s, tr: 1, b: 0, br: 0, a: 0 });
+      c.send({ t: 'in', s, tr: 1, b: 0, br: 0, f: 0, a: 0 });
       await sleep(50);
     }
     expect(train.input.turn).toBe(1);
@@ -121,10 +121,25 @@ describe('input', () => {
   it('clamps turn = 50 to 1', async () => {
     const port = await start();
     const c = await join(port);
-    c.send({ t: 'in', s: 1, tr: 50, b: 1, br: 1, a: 1.25 });
+    c.send({ t: 'in', s: 1, tr: 50, b: 1, br: 1, f: 0, a: 1.25 });
     await sleep(120);
     const input = trainOf(c.id).input;
-    expect(input).toEqual({ turn: 1, boost: true, brake: true, aim: 1.25 });
+    expect(input).toEqual({ turn: 1, boost: true, brake: true, fire: false, aim: 1.25 });
+  });
+
+  it("fires the train's weapons while fire is held", async () => {
+    const port = await start({ config: NO_BOTS });
+    const c = await join(port);
+    const train = trainOf(c.id);
+    train.protectedFor = 0;
+    c.send({ t: 'in', s: 1, tr: 0, b: 0, br: 0, f: 1, a: 0.5 });
+    await sleep(300);
+    expect(train.input.fire).toBe(true);
+    const fired = c
+      .of('snap')
+      .flatMap((m) => m.ev)
+      .filter((e) => e.type === 'fired' && e.ownerId === c.id);
+    expect(fired.length).toBeGreaterThan(0);
   });
 
   it('ignores garbage and keeps serving other players', async () => {
@@ -135,7 +150,7 @@ describe('input', () => {
     a.sendRaw('42');
     a.sendRaw('{"t":"in","s":1,"tr":"left","b":0,"br":0,"a":0}');
     a.sendRaw('{"t":"in","s":2,"tr":0,"b":0,"br":0,"a":1e999}');
-    b.send({ t: 'in', s: 1, tr: -1, b: 0, br: 0, a: 0 });
+    b.send({ t: 'in', s: 1, tr: -1, b: 0, br: 0, f: 0, a: 0 });
     await sleep(150);
     expect(a.closeCode).toBeNull();
     expect(trainOf(a.id).input.turn).toBe(0);
@@ -171,7 +186,7 @@ describe('input', () => {
     const train = trainOf(c.id);
     // 200 inputs in one burst: the first 60 count, the rest are dropped; none are malformed.
     for (let s = 1; s <= 200; s++) {
-      c.send({ t: 'in', s, tr: s <= MAX_INPUT_RATE ? 1 : -1, b: 0, br: 0, a: 0 });
+      c.send({ t: 'in', s, tr: s <= MAX_INPUT_RATE ? 1 : -1, b: 0, br: 0, f: 0, a: 0 });
     }
     await sleep(200);
     expect(train.input.turn).toBe(1);
@@ -238,7 +253,7 @@ describe('snapshots', () => {
   it('includes the full own train, rounded numbers, and the ack', async () => {
     const port = await start();
     const c = await join(port);
-    c.send({ t: 'in', s: 7, tr: 0, b: 0, br: 0, a: 0 });
+    c.send({ t: 'in', s: 7, tr: 0, b: 0, br: 0, f: 0, a: 0 });
     await c.waitFor(() => c.of('snap').some((s) => s.ack === 7));
     const snap = c.of('snap').find((s) => s.ack === 7) as SnapshotMsg;
     const train = trainOf(c.id);

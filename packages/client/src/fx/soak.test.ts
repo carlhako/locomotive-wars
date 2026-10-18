@@ -48,6 +48,7 @@ describe('effects soak', () => {
         turn: Math.sin(f / 90),
         boost: f % 300 < 60,
         brake: false,
+        fire: f % 200 < 120,
         aim: f / 40,
       };
       const events = session.advance(dt, input);

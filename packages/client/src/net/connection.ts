@@ -119,7 +119,7 @@ export class NetSession implements GameSource {
   private pendingEvents: SimEvent[] = [];
   private lastSnapshotAt = 0;
 
-  private input: TrainInput = { turn: 0, boost: false, brake: false, aim: 0 };
+  private input: TrainInput = { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
   private sent: TrainInput | null = null;
   private sentAt = -Infinity;
   private seq = 0;
@@ -493,7 +493,11 @@ export class NetSession implements GameSource {
     const cur = this.input;
     const gap = now - this.sentAt;
     const controlsChanged =
-      !prev || prev.turn !== cur.turn || prev.boost !== cur.boost || prev.brake !== cur.brake;
+      !prev ||
+      prev.turn !== cur.turn ||
+      prev.boost !== cur.boost ||
+      prev.brake !== cur.brake ||
+      prev.fire !== cur.fire;
     const aimChanged = !prev || Math.abs(prev.aim - cur.aim) > 0.001;
     const heartbeat = gap >= INPUT_HEARTBEAT_MS * 0.75;
     const due =
@@ -511,6 +515,7 @@ export class NetSession implements GameSource {
         tr: cur.turn,
         b: cur.boost ? 1 : 0,
         br: cur.brake ? 1 : 0,
+        f: cur.fire ? 1 : 0,
         a: Math.round(cur.aim * 1000) / 1000,
       }),
     );

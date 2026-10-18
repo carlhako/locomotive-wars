@@ -61,7 +61,7 @@ export function createTrain(spawn: TrainSpawn, rules: TrainRules): TrainState {
     hull: INITIAL_HULL,
     maxHull: INITIAL_HULL,
     fuel: FUEL_MAX,
-    input: { turn: 0, boost: false, brake: false, aim: spawn.angle },
+    input: { turn: 0, boost: false, brake: false, fire: false, aim: spawn.angle },
     boostLocked: false,
     boosting: false,
     bridgeActive: false,

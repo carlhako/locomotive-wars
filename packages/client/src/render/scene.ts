@@ -28,6 +28,8 @@ export interface SceneOverlay {
   /** Mouse position in CSS pixels, or null when unknown. */
   mouse: { x: number; y: number } | null;
   boosting: boolean;
+  /** True while the fire button is held; the aim cursor shows it. */
+  firing: boolean;
   /** Screen shake offset in pixels. */
   shake: { x: number; y: number };
 }
@@ -77,7 +79,8 @@ export function renderScene(
 
   if (local?.alive && overlay.boosting)
     drawSpeedLines(env, local.angle, local.fuel / local.fuelMax);
-  if (local?.alive && overlay.mouse) drawAimCursor(env, overlay.mouse.x, overlay.mouse.y);
+  if (local?.alive && overlay.mouse)
+    drawAimCursor(env, overlay.mouse.x, overlay.mouse.y, overlay.firing);
 
   ctx.restore();
 }
@@ -100,12 +103,13 @@ function drawSpeedLines(env: DrawEnv, angle: number, fuelFraction: number): void
   ctx.globalAlpha = 1;
 }
 
-function drawAimCursor(env: DrawEnv, mx: number, my: number): void {
+/** The crosshair; while firing its ring tightens and brightens so a press visibly registers. */
+function drawAimCursor(env: DrawEnv, mx: number, my: number, firing: boolean): void {
   const { ctx } = env;
-  ctx.strokeStyle = 'rgba(255, 100, 100, 0.7)';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = firing ? 'rgba(255, 220, 120, 1)' : 'rgba(255, 100, 100, 0.7)';
+  ctx.lineWidth = firing ? 3 : 2;
   ctx.beginPath();
-  ctx.arc(mx, my, 14, 0, Math.PI * 2);
+  ctx.arc(mx, my, firing ? 11 : 14, 0, Math.PI * 2);
   ctx.stroke();
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -118,8 +122,8 @@ function drawAimCursor(env: DrawEnv, mx: number, my: number): void {
   ctx.moveTo(mx, my + 10);
   ctx.lineTo(mx, my + 22);
   ctx.stroke();
-  ctx.fillStyle = 'rgba(255, 100, 100, 0.4)';
+  ctx.fillStyle = firing ? 'rgba(255, 220, 120, 0.9)' : 'rgba(255, 100, 100, 0.4)';
   ctx.beginPath();
-  ctx.arc(mx, my, 2, 0, Math.PI * 2);
+  ctx.arc(mx, my, firing ? 3 : 2, 0, Math.PI * 2);
   ctx.fill();
 }

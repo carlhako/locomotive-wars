@@ -126,7 +126,7 @@ describe('round lifecycle', () => {
 
     // Frozen: held input moves nothing, and the world tick stands still.
     const train = server!.world.getTrain(c.id)!;
-    c.send({ t: 'in', s: 1, tr: 1, b: 1, br: 0, a: 0 });
+    c.send({ t: 'in', s: 1, tr: 1, b: 1, br: 0, f: 0, a: 0 });
     await sleep(30);
     const frozen = { tick: server!.world.state.tick, x: train.x, y: train.y, angle: train.angle };
     await ticks(2 * SECOND);
@@ -348,7 +348,7 @@ describe('player limit', () => {
 describe('idle kick', () => {
   /** Identical input heartbeats: the client is connected but not playing. */
   function heartbeat(c: TestClient, seq: number): void {
-    c.send({ t: 'in', s: seq, tr: 0, b: 0, br: 0, a: 0 });
+    c.send({ t: 'in', s: seq, tr: 0, b: 0, br: 0, f: 0, a: 0 });
   }
 
   it('warns 10 seconds ahead, then kicks with code 4000; heartbeats are not activity', async () => {
@@ -386,7 +386,7 @@ describe('idle kick', () => {
     const c = await join(port);
     await ticks(10 * SECOND);
     await c.waitFor(() => c.of('idleWarn').length > 0);
-    c.send({ t: 'in', s: 1, tr: 1, b: 0, br: 0, a: 0 });
+    c.send({ t: 'in', s: 1, tr: 1, b: 0, br: 0, f: 0, a: 0 });
     await sleep(30);
     await ticks(1);
     await c.waitFor(() => c.of('idleClear').length > 0);

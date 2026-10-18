@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TrainInput } from '@lw/shared';
 import { OFFLINE_BOTS, OfflineSession } from './offline.ts';
 
-const IDLE: TrainInput = { turn: 0, boost: false, brake: false, aim: 0 };
+const IDLE: TrainInput = { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
 
 describe('OfflineSession', () => {
   it('starts a world with the player and six bots', () => {
@@ -39,6 +39,20 @@ describe('OfflineSession', () => {
       return JSON.stringify([me.x, me.y, me.angle, s.currentWorld.state.tick]);
     };
     expect(run()).toBe(run());
+  });
+
+  it("fires the player's weapons only while fire is held", () => {
+    const session = new OfflineSession({ seed: 7 });
+    session.currentWorld.getTrain(session.playerId)!.protectedFor = 0;
+    const mine = (events: ReturnType<OfflineSession['advance']>) =>
+      events.filter((e) => e.type === 'fired' && e.ownerId === session.playerId);
+    const idle = [];
+    for (let i = 0; i < 30; i++) idle.push(...mine(session.advance(1 / 30, IDLE)));
+    expect(idle).toHaveLength(0);
+    const held = [];
+    for (let i = 0; i < 30; i++)
+      held.push(...mine(session.advance(1 / 30, { ...IDLE, fire: true })));
+    expect(held.length).toBeGreaterThan(0);
   });
 
   it('interpolates the view between ticks', () => {

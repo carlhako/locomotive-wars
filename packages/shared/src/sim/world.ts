@@ -2,6 +2,7 @@ import { botInput } from './bot.ts';
 import {
   collideTrains,
   dropCarriages,
+  countWeaponProjectiles,
   fireDrones,
   fireWeapons,
   ramEnemies,
@@ -318,6 +319,7 @@ export class World {
     if (typeof input.aim === 'number' && Number.isFinite(input.aim)) cur.aim = input.aim;
     if (typeof input.boost === 'boolean') cur.boost = input.boost;
     if (typeof input.brake === 'boolean') cur.brake = input.brake;
+    if (typeof input.fire === 'boolean') cur.fire = input.fire;
   }
 
   /** Adds a carriage to a train as if it had picked one up. False at the carriage limit. */
@@ -383,6 +385,7 @@ export class World {
       }
     }
 
+    const liveShots = countWeaponProjectiles(this);
     for (const train of s.trains) {
       if (!train.alive) continue;
       if (train.protectedFor > 0) {
@@ -400,7 +403,7 @@ export class World {
           y: train.y,
         });
       }
-      fireWeapons(this, train);
+      fireWeapons(this, train, liveShots);
       fireDrones(this, train);
     }
     collideTrains(this);

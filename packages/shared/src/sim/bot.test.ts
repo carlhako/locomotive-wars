@@ -100,6 +100,51 @@ describe('bot controller', () => {
     expect(Math.abs(botInput(world, bot.id, world.rng).aim)).toBeCloseTo(Math.PI, 5);
   });
 
+  it('fires at an enemy 300 units away', () => {
+    const world = emptyWorld();
+    const bot = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      controller: 'bot',
+      x: 3000,
+      y: 3000,
+      angle: 0,
+    });
+    world.spawnEnemy('drone', 3000, 3300);
+    const input = botInput(world, bot.id, world.rng);
+    expect(input.fire).toBe(true);
+    expect(input.aim).toBeCloseTo(Math.PI / 2, 5);
+  });
+
+  it('holds fire with nothing in range', () => {
+    const world = emptyWorld();
+    const bot = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      controller: 'bot',
+      x: 3000,
+      y: 3000,
+      angle: 0,
+    });
+    world.spawnEnemy('drone', 3000, 3600);
+    world.addTrain({ protectedFor: 0, carriages: [], x: 3700, y: 3000, angle: 0 });
+    expect(botInput(world, bot.id, world.rng).fire).toBe(false);
+  });
+
+  it('never fires at a protected train', () => {
+    const world = emptyWorld();
+    const bot = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      controller: 'bot',
+      x: 3000,
+      y: 3000,
+      angle: 0,
+    });
+    world.addTrain({ protectedFor: 2, carriages: [], x: 3200, y: 3000, angle: 0 });
+    expect(botInput(world, bot.id, world.rng).fire).toBe(false);
+  });
+
   it('wanders when there is nothing to do', () => {
     const world = emptyWorld();
     const bot = world.addTrain({
@@ -120,7 +165,7 @@ describe('bot controller', () => {
     const world = emptyWorld();
     const bot = world.addTrain({ protectedFor: 0, carriages: [], controller: 'bot' });
     const input = botInput(world, bot.id, world.rng);
-    expect(Object.keys(input).sort()).toEqual(['aim', 'boost', 'brake', 'turn']);
+    expect(Object.keys(input).sort()).toEqual(['aim', 'boost', 'brake', 'fire', 'turn']);
     expect(Math.abs(input.turn)).toBeLessThanOrEqual(1);
   });
 

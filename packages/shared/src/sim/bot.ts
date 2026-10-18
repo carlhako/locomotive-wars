@@ -23,7 +23,7 @@ import type { World } from './world.ts';
  */
 export function botInput(world: World, trainId: number, rng: Rng): TrainInput {
   const train = world.getTrain(trainId);
-  if (!train) return { turn: 0, boost: false, brake: false, aim: 0 };
+  if (!train) return { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
   const size = world.rules.size;
   const ai = train.ai;
 
@@ -46,11 +46,13 @@ export function botInput(world: World, trainId: number, rng: Rng): TrainInput {
     targetAngle = wrapAngle(train.x, train.y, ai.targetX, ai.targetY, size);
   }
 
+  const shot = aimAt(world, train);
   return {
     turn: clamp(shortAngle(targetAngle - train.angle) * BOT_TURN_GAIN, -1, 1),
     boost: (ai.mode === 'flee' || ai.mode === 'attack') && train.fuel > BOT_BOOST_MIN_FUEL,
     brake: false,
-    aim: aimAngle(world, train),
+    fire: shot.fire,
+    aim: shot.aim,
   };
 }
 
@@ -106,8 +108,11 @@ function decide(world: World, train: TrainState, rng: Rng): void {
   ai.targetY = rng.range(BOT_WANDER_MARGIN, size - BOT_WANDER_MARGIN);
 }
 
-/** Bearing to the nearest enemy or unprotected other train's head in weapon range, else straight ahead. */
-function aimAngle(world: World, train: TrainState): number {
+/**
+ * Aim and fire for a bot: at the nearest enemy or unprotected other train's head in weapon
+ * range, firing; otherwise straight ahead, holding fire.
+ */
+function aimAt(world: World, train: TrainState): { aim: number; fire: boolean } {
   const size = world.rules.size;
   let bestDist = WEAPON_RANGE;
   let bx = 0;
@@ -133,5 +138,6 @@ function aimAngle(world: World, train: TrainState): number {
       found = true;
     }
   }
-  return found ? wrapAngle(train.x, train.y, bx, by, size) : train.angle;
+  if (!found) return { aim: train.angle, fire: false };
+  return { aim: wrapAngle(train.x, train.y, bx, by, size), fire: true };
 }

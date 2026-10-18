@@ -182,10 +182,10 @@ export const WEAPONS: Record<WeaponKind, WeaponStats> = {
   /** ref:735 */
   laser: { fireRate: 3.5, damage: 14, speed: 900, splash: 0, projectile: 'laser' },
 };
-/** ref:731: a hostile must be this close to a weapon carriage for it to fire. */
+/** new: most weapon-carriage projectiles one train may have in flight at once. */
+export const MAX_TRAIN_PROJECTILES = 120;
+/** ref:731: bots fire only at a target this close to their head. */
 export const WEAPON_RANGE = 550;
-/** ref:746: firing arc half-width from the carriage heading (72 degrees). */
-export const WEAPON_ARC = Math.PI / 2.5;
 /** ref:751: muzzle distance from the carriage. */
 export const WEAPON_MUZZLE_OFFSET = 9;
 /** ref:754 */

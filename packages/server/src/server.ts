@@ -263,6 +263,7 @@ export class GameServer {
             turn: clamp(msg.tr, -1, 1),
             boost: msg.b === 1,
             brake: msg.br === 1,
+            fire: msg.f === 1,
             aim: msg.a,
           },
         };

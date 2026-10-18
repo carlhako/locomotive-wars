@@ -8,7 +8,7 @@ import type {
 } from '../sim/types.ts';
 
 /** Bumped on any incompatible change to the message shapes. */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /**
  * The wire protocol, JSON for the beta. Keys are short and entity lists are arrays of numbers to
@@ -79,6 +79,8 @@ export interface InputMsg {
   b: 0 | 1;
   /** Brake. */
   br: 0 | 1;
+  /** Fire (weapon carriages fire while held). */
+  f: 0 | 1;
   /** World-space aim angle in radians. */
   a: number;
 }
@@ -381,8 +383,8 @@ export function decodeClientMessage(raw: string): ClientMessage | null {
       }
       return null;
     case 'in':
-      if (isInt(m.s) && isNum(m.tr) && isFlag(m.b) && isFlag(m.br) && isNum(m.a)) {
-        return { t: 'in', s: m.s, tr: m.tr, b: m.b, br: m.br, a: m.a };
+      if (isInt(m.s) && isNum(m.tr) && isFlag(m.b) && isFlag(m.br) && isFlag(m.f) && isNum(m.a)) {
+        return { t: 'in', s: m.s, tr: m.tr, b: m.b, br: m.br, f: m.f, a: m.a };
       }
       return null;
     case 'ping':

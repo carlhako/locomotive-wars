@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TrainInput } from '@lw/shared';
 import { AIM_ACTIVITY, IdleTracker, isFull } from './admission.ts';
 
-const IDLE: TrainInput = { turn: 0, boost: false, brake: false, aim: 0 };
+const IDLE: TrainInput = { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
 
 describe('isFull', () => {
   it('is full at the limit', () => {
@@ -21,6 +21,21 @@ describe('IdleTracker.observe', () => {
     expect(new IdleTracker(IDLE).observe({ ...IDLE, turn: 1 })).toBe(true);
     expect(new IdleTracker(IDLE).observe({ ...IDLE, boost: true })).toBe(true);
     expect(new IdleTracker(IDLE).observe({ ...IDLE, brake: true })).toBe(true);
+  });
+
+  it('counts pressing or releasing fire', () => {
+    const t = new IdleTracker(IDLE);
+    expect(t.observe({ ...IDLE, fire: true })).toBe(true);
+    expect(t.observe({ ...IDLE, fire: true })).toBe(false);
+    expect(t.observe({ ...IDLE })).toBe(true);
+  });
+
+  it('resets idle time when fire is pressed', () => {
+    const t = new IdleTracker(IDLE);
+    for (let i = 0; i < 40 * 30; i++) t.tick(1e9, 1e9);
+    expect(t.idleTicks).toBe(40 * 30);
+    t.observe({ ...IDLE, fire: true });
+    expect(t.idleTicks).toBe(0);
   });
 
   it('counts an aim change beyond 0.05 rad, measured the short way round', () => {

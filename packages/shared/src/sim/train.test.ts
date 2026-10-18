@@ -30,7 +30,7 @@ describe('train control input', () => {
     const train = world.addTrain({ protectedFor: 0, carriages: [], angle: 1 });
     world.setInput(train.id, { turn: 5, boost: true });
     world.setInput(train.id, { aim: 2 });
-    expect(train.input).toEqual({ turn: 1, boost: true, brake: false, aim: 2 });
+    expect(train.input).toEqual({ turn: 1, boost: true, brake: false, fire: false, aim: 2 });
     world.setInput(train.id, { turn: Number.NaN, aim: Infinity });
     expect(train.input.turn).toBe(1);
     expect(train.input.aim).toBe(2);

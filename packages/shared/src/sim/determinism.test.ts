@@ -22,6 +22,7 @@ function makeScenario(seed: number) {
         turn: Math.sin((tick + i * 40) / 25),
         boost: tick % 90 < 40,
         brake: tick % 150 > 140,
+        fire: (tick + i * 20) % 60 < 40,
         aim: (tick / 30) * (i + 1),
       });
     });

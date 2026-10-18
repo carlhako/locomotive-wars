@@ -52,7 +52,7 @@ const snapshot: SnapshotMsg = {
 
 const clientMessages: ClientMessage[] = [
   { t: 'hello', v: PROTOCOL_VERSION, name: 'Casey' },
-  { t: 'in', s: 5, tr: -1, b: 1, br: 0, a: 2.5 },
+  { t: 'in', s: 5, tr: -1, b: 1, br: 0, f: 1, a: 2.5 },
   { t: 'ping', c: 123456.5 },
   { t: 'hsName', token: '3f1c9a52-8d1e-4a6b-9a64-2b7d3e0c1f11', name: 'CARL' },
 ];
@@ -143,13 +143,15 @@ describe('decodeClientMessage', () => {
     ['hello with a fractional version', '{"t":"hello","v":1.5,"name":"a"}'],
     ['hello with a numeric name', '{"t":"hello","v":1,"name":7}'],
     ['hello with an enormous name', JSON.stringify({ t: 'hello', v: 1, name: 'x'.repeat(5000) })],
-    ['input missing a field', '{"t":"in","s":1,"tr":0,"b":0,"br":0}'],
-    ['input with a string turn', '{"t":"in","s":1,"tr":"1","b":0,"br":0,"a":0}'],
-    ['input with a boolean boost', '{"t":"in","s":1,"tr":0,"b":true,"br":0,"a":0}'],
-    ['input with boost 2', '{"t":"in","s":1,"tr":0,"b":2,"br":0,"a":0}'],
-    ['input with an infinite aim', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"a":1e999}'],
-    ['input with an infinite turn', '{"t":"in","s":1,"tr":-1e999,"b":0,"br":0,"a":0}'],
-    ['input with a fractional sequence', '{"t":"in","s":1.5,"tr":0,"b":0,"br":0,"a":0}'],
+    ['input missing a field', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0}'],
+    ['input missing fire', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"a":0}'],
+    ['input with fire 2', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":2,"a":0}'],
+    ['input with a string turn', '{"t":"in","s":1,"tr":"1","b":0,"br":0,"f":0,"a":0}'],
+    ['input with a boolean boost', '{"t":"in","s":1,"tr":0,"b":true,"br":0,"f":0,"a":0}'],
+    ['input with boost 2', '{"t":"in","s":1,"tr":0,"b":2,"br":0,"f":0,"a":0}'],
+    ['input with an infinite aim', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0,"a":1e999}'],
+    ['input with an infinite turn', '{"t":"in","s":1,"tr":-1e999,"b":0,"br":0,"f":0,"a":0}'],
+    ['input with a fractional sequence', '{"t":"in","s":1.5,"tr":0,"b":0,"br":0,"f":0,"a":0}'],
     ['ping with a string time', '{"t":"ping","c":"now"}'],
     ['hsName without a token', '{"t":"hsName","name":"CARL"}'],
     ['hsName with an empty token', '{"t":"hsName","token":"","name":"CARL"}'],
@@ -169,13 +171,13 @@ describe('decodeClientMessage', () => {
   });
 
   it('passes an out-of-range turn through for the server to clamp', () => {
-    const msg = decodeClientMessage('{"t":"in","s":1,"tr":50,"b":0,"br":0,"a":0}');
-    expect(msg).toEqual({ t: 'in', s: 1, tr: 50, b: 0, br: 0, a: 0 });
+    const msg = decodeClientMessage('{"t":"in","s":1,"tr":50,"b":0,"br":0,"f":0,"a":0}');
+    expect(msg).toEqual({ t: 'in', s: 1, tr: 50, b: 0, br: 0, f: 0, a: 0 });
   });
 
   it('drops unknown extra fields, such as a client-claimed position', () => {
-    const msg = decodeClientMessage('{"t":"in","s":1,"tr":0,"b":0,"br":0,"a":0,"x":5,"y":6}');
-    expect(msg).toEqual({ t: 'in', s: 1, tr: 0, b: 0, br: 0, a: 0 });
+    const msg = decodeClientMessage('{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0,"a":0,"x":5,"y":6}');
+    expect(msg).toEqual({ t: 'in', s: 1, tr: 0, b: 0, br: 0, f: 0, a: 0 });
   });
 });
 

@@ -100,7 +100,7 @@ export class Game {
     };
 
     bindMuteButton(this.sound.isMuted, (muted) => this.sound.setMuted(muted));
-    this.input.attach(window, () => this.sound.unlock());
+    this.input.attach(window, () => this.sound.unlock(), this.surface.ctx.canvas);
   }
 
   start(): void {
@@ -188,6 +188,7 @@ export class Game {
         aim: this.aim,
         mouse: this.input.mouse,
         boosting: this.input.boosting,
+        firing: this.input.firing,
         shake: this.shake.offset(),
       },
       dt,

@@ -54,6 +54,7 @@ export class InputState {
   private right = false;
   private brake = false;
   private boost = false;
+  private fire = false;
   /** Last known mouse position in CSS pixels, or null before the mouse first moves. */
   mouse: { x: number; y: number } | null = null;
 
@@ -91,13 +92,27 @@ export class InputState {
     this.mouse = { x, y };
   }
 
-  /** Releases every held key, for when the window loses focus. */
+  /** The fire button went down over the playfield. */
+  fireDown(): void {
+    this.fire = true;
+  }
+
+  /** The fire button was released, wherever the pointer is. */
+  fireUp(): void {
+    this.fire = false;
+  }
+
+  /** Releases every held key and the fire button, for when the window loses focus. */
   releaseAll(): void {
-    this.left = this.right = this.brake = this.boost = false;
+    this.left = this.right = this.brake = this.boost = this.fire = false;
   }
 
   get boosting(): boolean {
     return this.boost;
+  }
+
+  get firing(): boolean {
+    return this.fire;
   }
 
   /** -1 left, +1 right, 0 when neither or both are held. */
@@ -114,12 +129,18 @@ export class InputState {
       turn: this.turn,
       boost: this.boost,
       brake: this.brake,
+      fire: this.fire,
       aim: this.mouse ? aimAngle(this.mouse.x, this.mouse.y, head.x, head.y) : fallbackAim,
     };
   }
 
-  /** Wires the window's keyboard and mouse events. Returns a function that removes them. */
-  attach(target: Window, onGesture?: () => void): () => void {
+  /**
+   * Wires the window's keyboard and mouse events. Fire starts only from a left-button press on
+   * `fireSurface` (the game canvas), so clicks on buttons and overlays never fire; it stops on a
+   * release anywhere in the window or when the window loses focus. Returns a function that
+   * removes the listeners.
+   */
+  attach(target: Window, onGesture?: () => void, fireSurface?: EventTarget): () => void {
     const onKeyDown = (e: KeyboardEvent): void => {
       // A name box (the high score entry) gets its keys: A, D, S, and Space must type.
       if (isTypingTarget(e.target as Element | null)) return;
@@ -129,8 +150,18 @@ export class InputState {
     const onKeyUp = (e: KeyboardEvent): void => {
       this.keyUp(e.key);
     };
-    const onMouseMove = (e: MouseEvent): void => this.mouseMove(e.clientX, e.clientY);
+    const onMouseMove = (e: MouseEvent): void => {
+      this.mouseMove(e.clientX, e.clientY);
+      // A release outside the window may never reach us; a move with no button down ends fire.
+      if ((e.buttons & 1) === 0) this.fireUp();
+    };
     const onMouseDown = (): void => onGesture?.();
+    const onFireDown = (e: Event): void => {
+      if ((e as PointerEvent).button === 0) this.fireDown();
+    };
+    const onFireUp = (e: Event): void => {
+      if ((e as PointerEvent).button === 0) this.fireUp();
+    };
     const onContextMenu = (e: Event): void => e.preventDefault();
     const onBlur = (): void => this.releaseAll();
     // Capture phase so the page's own handlers cannot swallow game keys before we see them.
@@ -138,6 +169,8 @@ export class InputState {
     target.addEventListener('keyup', onKeyUp);
     target.addEventListener('mousemove', onMouseMove);
     target.addEventListener('mousedown', onMouseDown);
+    target.addEventListener('pointerup', onFireUp);
+    fireSurface?.addEventListener('pointerdown', onFireDown);
     target.addEventListener('contextmenu', onContextMenu);
     target.addEventListener('blur', onBlur);
     return () => {
@@ -145,6 +178,8 @@ export class InputState {
       target.removeEventListener('keyup', onKeyUp);
       target.removeEventListener('mousemove', onMouseMove);
       target.removeEventListener('mousedown', onMouseDown);
+      target.removeEventListener('pointerup', onFireUp);
+      fireSurface?.removeEventListener('pointerdown', onFireDown);
       target.removeEventListener('contextmenu', onContextMenu);
       target.removeEventListener('blur', onBlur);
     };

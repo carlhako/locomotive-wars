@@ -1,4 +1,4 @@
-import { encodeMessage, PROTOCOL_VERSION } from '@lw/shared';
+import { encodeMessage, MAX_TRAIN_PROJECTILES, PROTOCOL_VERSION } from '@lw/shared';
 import { WebSocket } from 'ws';
 import { parseConfig } from './config.ts';
 import { GameServer } from './server.ts';
@@ -14,7 +14,8 @@ import { GameServer } from './server.ts';
  * already-running server, such as http://localhost:8080, instead of starting one).
  *
  * Passes when ticks are within 1% of 30 per second and the 95th-percentile per-client downstream
- * rate (wire bytes, one sample per client per second) is at most 100 KB/s.
+ * rate (wire bytes, one sample per client per second) is at most 100 KB/s. With an in-process
+ * server it also checks that no train ever has more weapon projectiles in flight than the budget.
  */
 
 const SECONDS = Number(process.env.SOAK_SECONDS ?? 60);
@@ -32,6 +33,7 @@ interface Slot {
   lastBytes: number;
   turn: number;
   boost: boolean;
+  fire: boolean;
   aim: number;
   seq: number;
 }
@@ -95,6 +97,7 @@ async function main(): Promise<boolean> {
     lastBytes: 0,
     turn: 0,
     boost: false,
+    fire: false,
     aim: 0,
     seq: 0,
   }));
@@ -116,13 +119,14 @@ async function main(): Promise<boolean> {
   };
   for (const slot of slots) connect(slot);
 
-  // Each client steers randomly, boosts now and then, and sweeps its aim around.
+  // Each client steers randomly, boosts and fires now and then, and sweeps its aim around.
   const driver = setInterval(() => {
     for (const slot of slots) {
       const ws = slot.ws;
       if (!ws || ws.readyState !== WebSocket.OPEN) continue;
       if (Math.random() < 0.15) slot.turn = [-1, 0, 1][Math.floor(Math.random() * 3)] as number;
       if (Math.random() < 0.05) slot.boost = !slot.boost;
+      if (Math.random() < 0.1) slot.fire = !slot.fire;
       slot.aim = Math.random() < 0.3 ? (Math.random() - 0.5) * 2 * Math.PI : slot.aim;
       slot.seq += 1;
       ws.send(
@@ -132,6 +136,7 @@ async function main(): Promise<boolean> {
           tr: slot.turn,
           b: slot.boost ? 1 : 0,
           br: 0,
+          f: slot.fire ? 1 : 0,
           a: slot.aim,
         }),
       );
@@ -145,7 +150,17 @@ async function main(): Promise<boolean> {
   const samples: number[] = [];
   for (const slot of slots) slot.lastBytes = slot.ws ? bytesRead(slot.ws) : 0;
 
+  let peakShots = 0;
   const sampler = setInterval(() => {
+    if (server) {
+      const perTrain = new Map<number, number>();
+      for (const p of server.world.state.projectiles) {
+        if (p.ownerKind === 'train' && p.kind !== 'drone') {
+          perTrain.set(p.ownerId, (perTrain.get(p.ownerId) ?? 0) + 1);
+        }
+      }
+      for (const n of perTrain.values()) peakShots = Math.max(peakShots, n);
+    }
     for (const slot of slots) {
       if (!slot.ws) continue;
       const now = bytesRead(slot.ws);
@@ -170,6 +185,7 @@ async function main(): Promise<boolean> {
 
   const tickOk = Math.abs(drift) <= TICK_TOLERANCE;
   const bandwidthOk = p95 <= MAX_KB_PER_SECOND;
+  const shotsOk = peakShots <= MAX_TRAIN_PROJECTILES;
   console.log(
     `ticks: ${ticks} in ${elapsed.toFixed(1)}s (expected ${expected.toFixed(0)}, ${(drift * 100).toFixed(2)}%)` +
       `${server ? `, loop overruns: ${overruns}` : ''} ${tickOk ? 'OK' : 'FAIL'}`,
@@ -179,8 +195,15 @@ async function main(): Promise<boolean> {
       `(${samples.length} samples) ${bandwidthOk ? 'OK' : `FAIL (limit ${MAX_KB_PER_SECOND})`}`,
   );
 
+  if (server) {
+    console.log(
+      `peak weapon projectiles per train: ${peakShots} ` +
+        `${shotsOk ? 'OK' : `FAIL (budget ${MAX_TRAIN_PROJECTILES})`}`,
+    );
+  }
+
   await server?.close();
-  return tickOk && bandwidthOk;
+  return tickOk && bandwidthOk && shotsOk;
 }
 
 main().then(

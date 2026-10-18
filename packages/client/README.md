@@ -28,7 +28,8 @@ shared simulation inside the page with six bots.
 | `A` / `D`, `←`/`→` | Turn left / right                                                |
 | `Space`            | Boost (drains fuel; the tank refills while you are not boosting) |
 | `S` / `↓`          | Brake                                                            |
-| Mouse              | Aim weapons, measured from your locomotive's screen position     |
+| Mouse              | Aim, measured from your locomotive's screen position             |
+| Hold left click    | Fire every weapon carriage at the cursor                         |
 
 These keys never scroll the page. The mute button at the bottom of the screen silences all
 audio; the choice is remembered in `localStorage` under `lw.muted`. If your browser blocks

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAX_TRAIN_PROJECTILES } from './constants.ts';
 import type { Projectile } from './types.ts';
 import { emptyWorld, ofType, run } from './testing.ts';
 import type { World } from './world.ts';
@@ -29,7 +30,7 @@ describe('weapon fire along aim', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
     world.addTrain({ protectedFor: 0, carriages: [], x: 1300, y: 1000, angle: Math.PI });
-    world.setInput(a.id, { aim: 0.1 });
+    world.setInput(a.id, { aim: 0.1, fire: true });
     const events = world.step();
     const fired = ofType(events, 'fired');
     expect(fired).toHaveLength(1);
@@ -40,7 +41,7 @@ describe('weapon fire along aim', () => {
     expect(Math.atan2(p!.vy, p!.vx)).toBeCloseTo(0.1);
   });
 
-  it('does not fire without a hostile in range', () => {
+  it('fires with no target in range', () => {
     const world = emptyWorld();
     const a = world.addTrain({
       protectedFor: 0,
@@ -49,31 +50,44 @@ describe('weapon fire along aim', () => {
       angle: 0,
       carriages: ['mg', 'laser', 'missile'],
     });
-    world.addTrain({ protectedFor: 0, carriages: [], x: 2000, y: 1000, angle: 0 });
-    const events = run(world, 5);
-    expect(ofType(events, 'fired')).toHaveLength(0);
-    expect(world.state.projectiles.filter((p) => p.ownerId === a.id)).toHaveLength(0);
+    world.setInput(a.id, { aim: 0, fire: true });
+    const fired = ofType(world.step(), 'fired').filter((f) => f.ownerId === a.id);
+    expect(fired.map((f) => f.weapon).sort()).toEqual(['bullet', 'laser', 'missile']);
   });
 
-  it('does not fire when the aim is outside the carriage arc', () => {
+  it('fires behind the train', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
-    world.addTrain({ protectedFor: 0, carriages: [], x: 1300, y: 1000, angle: Math.PI });
-    world.setInput(a.id, { aim: Math.PI });
-    expect(ofType(run(world, 5), 'fired')).toHaveLength(0);
+    world.setInput(a.id, { aim: Math.PI, fire: true });
+    const fired = ofType(world.step(), 'fired');
+    expect(fired).toHaveLength(1);
+    expect(Math.cos(fired[0]!.angle)).toBeCloseTo(-1);
+  });
+
+  it('does not fire while fire is released, even with a target close by', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
+    world.spawnEnemy('sentry', 1200, 1000);
+    world.setInput(a.id, { aim: 0, fire: false });
+    const events = run(world, 10);
+    expect(ofType(events, 'fired').filter((f) => f.ownerId === a.id)).toHaveLength(0);
+  });
+
+  it('keeps firing on held fire with no new input', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
+    world.setInput(a.id, { aim: 0, fire: true });
+    const events = run(world, 10);
+    expect(ofType(events, 'fired').filter((f) => f.ownerId === a.id).length).toBeGreaterThan(1);
   });
 
   it('respects fire rate: about 7 MG shots per second', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
-    a.hull = a.maxHull = 1e9;
-    // A stationary target so the shots keep flowing.
-    world.spawnEnemy('sentry', 1300, 1000);
-    world.state.enemies[0]!.hull = 1e9;
-    world.setInput(a.id, { aim: 0, brake: true });
-    const shots = ofType(run(world, 30 * 4), 'fired').filter((f) => f.ownerId === a.id);
-    expect(shots.length).toBeGreaterThanOrEqual(26);
-    expect(shots.length).toBeLessThanOrEqual(29);
+    world.setInput(a.id, { aim: 0, fire: true });
+    const shots = ofType(run(world, 30), 'fired').filter((f) => f.ownerId === a.id);
+    expect(shots.length).toBeGreaterThanOrEqual(6);
+    expect(shots.length).toBeLessThanOrEqual(8);
   });
 
   it('fires counter-drones at enemies in range', () => {
@@ -82,6 +96,63 @@ describe('weapon fire along aim', () => {
     world.spawnEnemy('sentry', 1150, 1000);
     const events = run(world, 3);
     expect(ofType(events, 'fired').some((f) => f.weapon === 'drone')).toBe(true);
+  });
+});
+
+describe('weapon projectile budget', () => {
+  function bigTrain(world: World) {
+    const a = world.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      angle: 0,
+      carriages: Array.from({ length: 40 }, () => 'mg' as const),
+    });
+    world.setInput(a.id, { aim: 0, fire: true });
+    return a;
+  }
+  const liveOf = (world: World, id: number) =>
+    world.state.projectiles.filter((p) => p.ownerId === id).length;
+
+  it('never lets one train have more than 120 weapon projectiles in flight', () => {
+    const world = emptyWorld();
+    const a = bigTrain(world);
+    let peak = 0;
+    for (let i = 0; i < 30 * 5; i++) {
+      world.step();
+      peak = Math.max(peak, liveOf(world, a.id));
+    }
+    expect(peak).toBe(MAX_TRAIN_PROJECTILES);
+  });
+
+  it('fires again as its projectiles expire', () => {
+    const world = emptyWorld();
+    const a = bigTrain(world);
+    run(world, 30 * 3);
+    expect(liveOf(world, a.id)).toBe(MAX_TRAIN_PROJECTILES);
+    const later = ofType(run(world, 30), 'fired').filter((f) => f.ownerId === a.id);
+    expect(later.length).toBeGreaterThan(0);
+    expect(liveOf(world, a.id)).toBeLessThanOrEqual(MAX_TRAIN_PROJECTILES);
+  });
+
+  it('does not bank shots while waiting at the limit', () => {
+    const world = emptyWorld();
+    const a = bigTrain(world);
+    run(world, 30 * 3);
+    for (const t of a.fireTimers) expect(t).toBeGreaterThanOrEqual(-world.dt - 1e-9);
+  });
+
+  it('does not count counter-drone shots', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
+    for (let i = 0; i < MAX_TRAIN_PROJECTILES; i++) {
+      inject(
+        world,
+        shot({ id: 20000 + i, kind: 'drone', x: 4000, y: 4000, life: 5, ownerId: a.id }),
+      );
+    }
+    world.setInput(a.id, { aim: 0, fire: true });
+    expect(ofType(world.step(), 'fired').filter((f) => f.weapon === 'bullet')).toHaveLength(1);
   });
 });
 

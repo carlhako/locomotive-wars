@@ -6,7 +6,7 @@ import type { ConnectionStatus, DisconnectReason } from './connection.ts';
 import { makeOwn, makeSnapshot } from './testing.ts';
 import type { Connect, TransportHandlers } from './transport.ts';
 
-const STILL: TrainInput = { turn: 0, boost: false, brake: false, aim: 0 };
+const STILL: TrainInput = { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
 
 /** A transport the test drives by hand. */
 class FakeServer {
@@ -171,13 +171,28 @@ describe('NetSession input', () => {
     session.advance(0.016, { ...STILL, turn: 1 });
     const inputs = server.of('in');
     expect(inputs).toHaveLength(1);
-    expect(inputs[0]).toMatchObject({ t: 'in', tr: 1, b: 0, br: 0 });
+    expect(inputs[0]).toMatchObject({ t: 'in', tr: 1, b: 0, br: 0, f: 0 });
     vi.advanceTimersByTime(40);
     session.advance(0.016, { ...STILL, turn: 1, boost: true });
     const after = server.of('in');
     expect(after).toHaveLength(2);
     expect(after[1]?.s).toBeGreaterThan(after[0]?.s ?? 0);
     expect(after[1]?.b).toBe(1);
+  });
+
+  it('sends a fire press at once, without waiting for the heartbeat', () => {
+    const session = makeSession();
+    online(session);
+    session.advance(0.016, STILL);
+    vi.advanceTimersByTime(30);
+    server.sent.length = 0;
+    session.advance(0.016, { ...STILL, fire: true });
+    const inputs = server.of('in');
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]?.f).toBe(1);
+    vi.advanceTimersByTime(30);
+    session.advance(0.016, STILL);
+    expect(server.of('in').at(-1)?.f).toBe(0);
   });
 
   it('keeps sending a heartbeat at least every 100 ms while nothing changes', () => {

@@ -87,6 +87,72 @@ describe('InputState', () => {
   });
 });
 
+describe('fire capture', () => {
+  const head = { x: 400, y: 300 };
+
+  function pointer(type: string, button = 0): Event {
+    return Object.assign(new Event(type), { button });
+  }
+
+  function attached() {
+    const input = new InputState();
+    const win = new EventTarget();
+    const canvas = new EventTarget();
+    input.attach(win as unknown as Window, undefined, canvas);
+    return { input, win, canvas };
+  }
+
+  it('fires while the left button is held on the canvas', () => {
+    const { input, win, canvas } = attached();
+    expect(input.toTrainInput(head, 0).fire).toBe(false);
+    canvas.dispatchEvent(pointer('pointerdown'));
+    expect(input.toTrainInput(head, 0).fire).toBe(true);
+    expect(input.firing).toBe(true);
+    win.dispatchEvent(pointer('pointerup'));
+    expect(input.toTrainInput(head, 0).fire).toBe(false);
+  });
+
+  it('ignores other mouse buttons', () => {
+    const { input, canvas } = attached();
+    canvas.dispatchEvent(pointer('pointerdown', 2));
+    expect(input.toTrainInput(head, 0).fire).toBe(false);
+  });
+
+  it('stops firing when the window loses focus', () => {
+    const { input, win, canvas } = attached();
+    canvas.dispatchEvent(pointer('pointerdown'));
+    win.dispatchEvent(new Event('blur'));
+    expect(input.toTrainInput(head, 0).fire).toBe(false);
+  });
+
+  it('does not fire from a click outside the canvas', () => {
+    const { input, win } = attached();
+    win.dispatchEvent(pointer('pointerdown'));
+    win.dispatchEvent(pointer('mousedown'));
+    expect(input.toTrainInput(head, 0).fire).toBe(false);
+  });
+
+  it('stops firing on a mouse move with the button up (a release outside the window)', () => {
+    const { input, win, canvas } = attached();
+    canvas.dispatchEvent(pointer('pointerdown'));
+    win.dispatchEvent(
+      Object.assign(new Event('mousemove'), { clientX: 1, clientY: 1, buttons: 1 }),
+    );
+    expect(input.firing).toBe(true);
+    win.dispatchEvent(
+      Object.assign(new Event('mousemove'), { clientX: 1, clientY: 1, buttons: 0 }),
+    );
+    expect(input.firing).toBe(false);
+  });
+
+  it('is released by releaseAll', () => {
+    const input = new InputState();
+    input.fireDown();
+    input.releaseAll();
+    expect(input.firing).toBe(false);
+  });
+});
+
 describe('aimAngle', () => {
   it('points right, down, left, and up', () => {
     expect(aimAngle(10, 0, 0, 0)).toBeCloseTo(0);

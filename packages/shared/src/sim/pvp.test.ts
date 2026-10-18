@@ -107,19 +107,22 @@ describe('spawn protection', () => {
     const world = emptyWorld();
     const a = world.addTrain({ x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
     train(world, { x: 1300, y: 1000, angle: Math.PI });
-    world.setInput(a.id, { aim: 0 });
+    world.setInput(a.id, { aim: 0, fire: true });
     expect(ofType(run(world, 30), 'fired')).toHaveLength(0);
     a.protectedFor = 0;
     expect(ofType(run(world, 5), 'fired').length).toBeGreaterThan(0);
   });
 
-  it("does not trigger other trains' weapons or aim", () => {
+  it('lets a human fire toward a protected train without harming it', () => {
     const world = emptyWorld();
     const shooter = train(world, { x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
-    world.addTrain({ x: 1300, y: 1000, angle: Math.PI, carriages: [] });
-    world.setInput(shooter.id, { aim: 0 });
-    const events = run(world, 10);
-    expect(ofType(events, 'fired').filter((f) => f.ownerId === shooter.id)).toHaveLength(0);
+    const target = world.addTrain({ x: 1300, y: 1000, angle: Math.PI, carriages: [] });
+    world.setInput(shooter.id, { aim: 0, fire: true });
+    const events = run(world, 20);
+    expect(ofType(events, 'fired').filter((f) => f.ownerId === shooter.id).length).toBeGreaterThan(
+      0,
+    );
+    expect(target.hull).toBe(target.maxHull);
   });
 
   it('keeps bots from targeting or aiming at a protected train', () => {
