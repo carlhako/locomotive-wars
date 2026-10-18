@@ -51,8 +51,8 @@ The killer's kill count SHALL increase when the killer is a train.
 For 3.5 seconds after spawning, a train SHALL be protected:
 - it takes no damage and cannot be destroyed by collision
 - its body is not lethal to others
-- its weapons do not fire
-- other trains' weapons do not target it
+- its weapons do not fire, even while its fire input is on
+- bots do not aim at or fire on it
 
 Clients SHALL show a shield ring on protected trains.
 
@@ -67,3 +67,7 @@ Clients SHALL show a shield ring on protected trains.
 #### Scenario: Protected body is harmless
 - **WHEN** another train's head touches a protected train's 8th carriage
 - **THEN** neither train is destroyed
+
+#### Scenario: Protected train holding fire
+- **WHEN** a protected train's player holds the fire button
+- **THEN** none of its weapon carriages fire until protection expires
