@@ -18,6 +18,11 @@ describe('key mapping', () => {
     expect(actionForKey('ArrowDown')).toBe('brake');
   });
 
+  it('maps H to the legend toggle', () => {
+    expect(actionForKey('h')).toBe('legend');
+    expect(actionForKey('H')).toBe('legend');
+  });
+
   it('ignores other keys', () => {
     expect(actionForKey('Enter')).toBeNull();
     expect(actionForKey('m')).toBeNull();
@@ -84,6 +89,35 @@ describe('InputState', () => {
     input.releaseAll();
     expect(input.turn).toBe(0);
     expect(input.boosting).toBe(false);
+  });
+});
+
+describe('legend key', () => {
+  function key(code: string, target: unknown, repeat = false): Event {
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'target', { value: target });
+    return Object.assign(e, { key: code, repeat });
+  }
+
+  it('toggles the legend on H, once per press', () => {
+    const input = new InputState();
+    const win = new EventTarget();
+    let toggles = 0;
+    input.onLegendToggle = () => (toggles += 1);
+    input.attach(win as unknown as Window);
+    win.dispatchEvent(key('h', { tagName: 'CANVAS' }));
+    win.dispatchEvent(key('h', { tagName: 'CANVAS' }, true));
+    expect(toggles).toBe(1);
+  });
+
+  it('does not toggle while typing in a text field', () => {
+    const input = new InputState();
+    const win = new EventTarget();
+    let toggles = 0;
+    input.onLegendToggle = () => (toggles += 1);
+    input.attach(win as unknown as Window);
+    win.dispatchEvent(key('H', { tagName: 'INPUT' }));
+    expect(toggles).toBe(0);
   });
 });
 

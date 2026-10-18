@@ -30,6 +30,7 @@ shared simulation inside the page with six bots.
 | `S` / `↓`          | Brake                                                            |
 | Mouse              | Aim, measured from your locomotive's screen position             |
 | Hold left click    | Fire every weapon carriage at the cursor                         |
+| `H`                | Show or hide the carriage guide (remembered as `lw.legend`)      |
 
 These keys never scroll the page. The mute button at the bottom of the screen silences all
 audio; the choice is remembered in `localStorage` under `lw.muted`. If your browser blocks

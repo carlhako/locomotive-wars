@@ -2,7 +2,7 @@ import { DRONE_ORBIT_RADIUS, wrapDelta, wrapDist } from '@lw/shared';
 import type { CarriageView, TrainView } from '@lw/shared';
 import type { DrawEnv } from './canvas.ts';
 import { onScreen, screenX, screenY } from './canvas.ts';
-import { CARRIAGE_COLORS, isWeaponCarriage, LOCAL_COLOR } from './palette.ts';
+import { CARRIAGE_TYPES, carriageColors, isWeaponCarriage, LOCAL_COLOR } from './palette.ts';
 
 function clamp(v: number, min: number, max: number): number {
   return v < min ? min : v > max ? max : v;
@@ -150,7 +150,7 @@ function drawCarriage(
   ctx.save();
   ctx.translate(px, py);
   ctx.rotate(c.angle);
-  const colors = CARRIAGE_COLORS[c.kind];
+  const colors = carriageColors(c.kind);
   ctx.fillStyle = colors.body;
   ctx.fillRect(-8, -6, 16, 12);
   ctx.fillStyle = colors.light;
@@ -184,51 +184,14 @@ function drawCarriage(
       ctx.fillStyle = '#ffee88';
       ctx.fillRect(0, -0.5, 8, 1);
     }
-  } else if (c.kind === 'shield') {
-    ctx.fillStyle = colors.light;
-    ctx.beginPath();
-    ctx.arc(0, 0, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  } else if (c.kind === 'drones') {
-    ctx.fillStyle = colors.light;
-    ctx.fillRect(-0.5, -8, 1, 4);
-    ctx.beginPath();
-    ctx.arc(0, -8, 2, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (c.kind === 'armor') {
-    ctx.fillStyle = colors.light;
-    for (let q = 0; q < 6; q++) {
-      const a = (q * Math.PI) / 3;
-      ctx.fillRect(Math.cos(a) * 3 - 0.5, Math.sin(a) * 3 - 0.5, 1, 1);
-    }
-  } else if (c.kind === 'speed') {
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.moveTo(-1, -3);
-    ctx.lineTo(2, -1);
-    ctx.lineTo(0, 0);
-    ctx.lineTo(2, 3);
-    ctx.lineTo(-1, 1);
-    ctx.lineTo(1, 0);
-    ctx.closePath();
-    ctx.fill();
-  } else if (c.kind === 'magnet') {
-    ctx.fillStyle = colors.light;
-    ctx.fillRect(-3, -3, 6, 2);
-    ctx.fillRect(-3, 1, 6, 2);
-  } else if (c.kind === 'fuel') {
-    ctx.fillStyle = colors.light;
-    ctx.beginPath();
-    ctx.arc(0, 0, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 6px sans-serif';
+  } else if (c.kind !== 'locomotive') {
+    // Non-weapon carriages carry their type's icon, kept upright whatever the heading.
+    ctx.rotate(-c.angle);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.font = 'bold 8px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('F', 0, 0);
+    ctx.fillText(CARRIAGE_TYPES[c.kind].icon, 0, 0.5);
   }
   ctx.restore();
 }

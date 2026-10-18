@@ -3,7 +3,7 @@ import type { EnemyKind, SimEvent, WorldView } from '@lw/shared';
 import type { SoundPlayer } from '../audio/sound.ts';
 import type { BannerSink, ScreenFlashSink } from '../hud/banner.ts';
 import type { KillFeedSink } from '../hud/killfeed.ts';
-import { PICKUP_STYLES } from '../render/palette.ts';
+import { CARRIAGE_TYPES } from '../render/palette.ts';
 import type { DamageNumberSink } from './damageNumbers.ts';
 import type { HitFlashSink } from './hitFlash.ts';
 import { burst, muzzleSparks } from './particles.ts';
@@ -271,7 +271,7 @@ export function applyEvents(events: readonly SimEvent[], ctx: FxContext, fx: FxT
       }
 
       case 'pickup': {
-        const color = PICKUP_STYLES[e.carriage].color;
+        const color = CARRIAGE_TYPES[e.carriage].color;
         burst(
           fx.particles,
           e.x,

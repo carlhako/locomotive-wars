@@ -8,6 +8,7 @@ import { ScreenShake } from './fx/shake.ts';
 import { Banner, DamageFlash } from './hud/banner.ts';
 import { bindMuteButton, Hud } from './hud/hud.ts';
 import { KillFeed, KillFeedView } from './hud/killfeed.ts';
+import { DomLegendView, Legend } from './hud/legend.ts';
 import {
   boardFromView,
   LeaderboardView,
@@ -53,6 +54,7 @@ export class Game {
   private readonly sound = new SoundFX();
   private readonly hud = new Hud();
   private readonly leaderboard = new LeaderboardView(el('leaderboard-rows'));
+  private readonly legend = new Legend(new DomLegendView(el('legend'), el('legend-rows')));
   private readonly roundOverlay = new RoundOverlay();
 
   private readonly camera = createCamera();
@@ -100,6 +102,7 @@ export class Game {
     };
 
     bindMuteButton(this.sound.isMuted, (muted) => this.sound.setMuted(muted));
+    this.input.onLegendToggle = () => this.legend.toggle();
     this.input.attach(window, () => this.sound.unlock(), this.surface.ctx.canvas);
   }
 
@@ -196,6 +199,7 @@ export class Game {
     drawMinimap(this.minimapCtx, view, size, { width, height });
     const round = this.source.round?.() ?? null;
     this.hud.update(view, round, this.source.idleWarning?.() ?? null);
+    this.legend.render(local?.alive ? local.carriages.map((c) => c.kind) : null);
     this.leaderboard.render(
       leaderboardModel(this.source.board?.() ?? boardFromView(view), localScoreOf(view)),
     );

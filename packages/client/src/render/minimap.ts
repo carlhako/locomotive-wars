@@ -1,5 +1,5 @@
 import type { WorldView } from '@lw/shared';
-import { LOCAL_COLOR, PICKUP_STYLES } from './palette.ts';
+import { CARRIAGE_TYPES, LOCAL_COLOR } from './palette.ts';
 
 /** Minimap canvas side length in pixels (reference line 2460). */
 export const MINIMAP_SIZE = 180;
@@ -31,12 +31,12 @@ export function drawMinimap(
   m.stroke();
 
   for (const t of view.trailers) {
-    m.fillStyle = PICKUP_STYLES[t.kind].color;
+    m.fillStyle = CARRIAGE_TYPES[t.kind].color;
     m.globalAlpha = 0.5;
     m.fillRect(t.x * scale - 1, t.y * scale - 1, 2, 2);
   }
   for (const p of view.drops) {
-    m.fillStyle = PICKUP_STYLES[p.kind].color;
+    m.fillStyle = CARRIAGE_TYPES[p.kind].color;
     m.globalAlpha = 0.7;
     m.fillRect(p.x * scale - 1, p.y * scale - 1, 2, 2);
   }

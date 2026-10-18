@@ -94,7 +94,7 @@ The goal is that every pair of types is distinguishable on the dark background. 
 
 ### Legend panel
 
-- **Markup:** `#legend` in `index.html`, a `.panel` at the top-right, placed directly under `#minimap-panel` (top ≈ 245 px) with its right edge aligned to the minimap, 240 px wide, and `pointer-events: none` like the other panels.
+- **Markup:** `#legend` in `index.html`, a `.panel` at the top-right, placed directly under `#minimap-panel` (top ≈ 245 px) with its right edge aligned to the minimap, 276 px wide (the width a 24-character description needs beside the name and count), and `pointer-events: none` like the other panels.
 - **Content:** a header row "Carriages · H" with a ▾/▸ indicator, then one section per category with a small uppercase heading. Each type is a single 15 px flex line: swatch (10 px square in `color`), icon, label (fixed ~80 px column), the description in 10 px grey, and `×N` on the right. One line per type keeps the panel short enough for the 16 types change 10 brings: about 16 × 15 px + 4 headings ≈ 320 px.
 - **Controller:** `hud/legend.ts` exports a `Legend` class with:
   - `render(kinds: CarriageKind[])`, called from the frame loop with the local train's carriage kinds

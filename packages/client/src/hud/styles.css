@@ -192,6 +192,115 @@ body:not(.playing) #damage-flash {
   border-radius: 4px;
   margin: 0 auto;
 }
+#legend {
+  position: absolute;
+  /* Directly under the minimap panel, right edges aligned. */
+  top: 254px;
+  right: 12px;
+  width: 276px;
+  padding: 8px 10px;
+  max-height: calc(100vh - 254px - 140px);
+  overflow: hidden;
+}
+#legend h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #6cf;
+  border-bottom: 1px solid rgba(100, 200, 255, 0.2);
+  padding-bottom: 5px;
+  margin-bottom: 2px;
+}
+#legend h3 .hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0;
+}
+#legend h3 kbd {
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  font-size: 9px;
+  color: #ccc;
+}
+#legend h3 .caret::before {
+  content: '▾';
+}
+#legend.collapsed h3 .caret::before {
+  content: '▸';
+}
+#legend.collapsed h3 {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+#legend.collapsed #legend-rows {
+  display: none;
+}
+#legend.stale #legend-rows {
+  opacity: 0.5;
+}
+#legend .lg-cat {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: rgba(100, 200, 255, 0.7);
+  margin: 6px 0 1px;
+}
+#legend .lg-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 15px;
+  font-size: 11px;
+  opacity: 0.45;
+  white-space: nowrap;
+}
+#legend .lg-row.owned {
+  opacity: 1;
+}
+#legend .lg-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+#legend .lg-icon {
+  flex: none;
+  width: 10px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: #ddd;
+}
+#legend .lg-label {
+  flex: none;
+  width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#legend .lg-row.owned .lg-label {
+  font-weight: bold;
+}
+#legend .lg-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 9.5px;
+  color: #999;
+}
+#legend .lg-count {
+  flex: none;
+  width: 22px;
+  text-align: right;
+  font-family: monospace;
+  font-weight: bold;
+}
 #tips {
   position: absolute;
   bottom: 12px;

@@ -6,7 +6,7 @@ import type { TrainInput } from '@lw/shared';
  * camera is offset by smoothing or the map seam.
  */
 
-export type KeyAction = 'left' | 'right' | 'brake' | 'boost' | 'forward';
+export type KeyAction = 'left' | 'right' | 'brake' | 'boost' | 'forward' | 'legend';
 
 /**
  * Maps a `KeyboardEvent.key` to a game action. W and Up are recognised so the page never
@@ -28,6 +28,8 @@ export function actionForKey(key: string): KeyAction | null {
     case 'w':
     case 'ArrowUp':
       return 'forward';
+    case 'h':
+      return 'legend';
     default:
       return null;
   }
@@ -55,6 +57,8 @@ export class InputState {
   private brake = false;
   private boost = false;
   private fire = false;
+  /** Called when the legend key is pressed (not on key repeat). */
+  onLegendToggle: (() => void) | null = null;
   /** Last known mouse position in CSS pixels, or null before the mouse first moves. */
   mouse: { x: number; y: number } | null = null;
 
@@ -145,6 +149,7 @@ export class InputState {
       // A name box (the high score entry) gets its keys: A, D, S, and Space must type.
       if (isTypingTarget(e.target as Element | null)) return;
       if (this.keyDown(e.key)) e.preventDefault();
+      if (!e.repeat && actionForKey(e.key) === 'legend') this.onLegendToggle?.();
       onGesture?.();
     };
     const onKeyUp = (e: KeyboardEvent): void => {
