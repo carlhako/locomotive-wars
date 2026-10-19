@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MAP_SIZE } from '@lw/shared';
 import type { DrawEnv } from './canvas.ts';
-import { createCamera, followCamera, screenX, screenY } from './canvas.ts';
+import { createCamera, followCamera, screenX, screenY, setupCanvas } from './canvas.ts';
 
 function envAt(cameraX: number, cameraY: number): DrawEnv {
   return {
@@ -58,10 +58,44 @@ describe('camera follow', () => {
     expect(cam.travelX).toBeCloseTo(6010, 1);
   });
 
+  it('closes 15% of the distance per 1/60 s by default, or the given fraction', () => {
+    const def = createCamera(0, 0);
+    followCamera(def, 1000, 0, MAP_SIZE, 1 / 60);
+    expect(def.x).toBeCloseTo(150);
+    const gentle = createCamera(0, 0);
+    followCamera(gentle, 1000, 0, MAP_SIZE, 1 / 60, false, 0.05);
+    expect(gentle.x).toBeCloseTo(50);
+  });
+
   it('converges to the target', () => {
     const cam = createCamera(0, 0);
     for (let i = 0; i < 300; i++) followCamera(cam, 400, 250, MAP_SIZE, 1 / 60);
     expect(cam.x).toBeCloseTo(400, 1);
     expect(cam.y).toBeCloseTo(250, 1);
+  });
+});
+
+describe('setupCanvas', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('removes its resize listener on dispose', () => {
+    const add = vi.fn();
+    const remove = vi.fn();
+    vi.stubGlobal('window', {
+      innerWidth: 800,
+      innerHeight: 600,
+      devicePixelRatio: 1,
+      addEventListener: add,
+      removeEventListener: remove,
+    });
+    const canvas = { width: 0, height: 0, getContext: () => ({}) };
+    const surface = setupCanvas(canvas as unknown as HTMLCanvasElement);
+    expect(add).toHaveBeenCalledWith('resize', expect.any(Function));
+    expect(canvas.width).toBe(800);
+
+    surface.dispose();
+    expect(remove).toHaveBeenCalledWith('resize', add.mock.calls[0]![1]);
   });
 });

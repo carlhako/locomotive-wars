@@ -1,9 +1,11 @@
 import './hud/styles.css';
+import { startAttract } from './attract/scene.ts';
 import { Game } from './loop.ts';
 import { NetSession } from './net/connection.ts';
 import { defaultServerUrl } from './net/transport.ts';
 import { OfflineSession } from './offline.ts';
 import { loadName, saveName } from './ui/join.ts';
+import { bindFooter } from './ui/footer.ts';
 import { bindDisconnectScreen, bindJoinScreen, disconnectMessage } from './ui/overlays.ts';
 
 /** `?offline` (any value) runs the shared simulation in this tab with bots, no server needed. */
@@ -26,8 +28,14 @@ function startOffline(): void {
 }
 
 function startOnline(): void {
+  // Bots play behind the join screen until the server accepts the join.
+  const attract = startAttract({
+    reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+  });
+  exposeForDebugging({ attract: attract.world });
   const join = bindJoinScreen();
   const disconnected = bindDisconnectScreen();
+  bindFooter();
   join.setName(loadName());
   join.show();
 
@@ -53,6 +61,7 @@ function startOnline(): void {
 
     session.ready.then(
       () => {
+        attract.stop();
         join.hide();
         document.body.classList.add('playing');
         const game = new Game(session);

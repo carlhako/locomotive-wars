@@ -68,37 +68,55 @@
     </div>
     <button id="mute-btn">🔊 Sound: On</button>
     <div id="join-screen" class="overlay">
-      <h1>LOCOMOTIVE WARS</h1>
-      <div class="subtitle">Slither-style train combat</div>
-      <p class="blurb">
-        Collect trailers to grow your train. Each trailer is a weapon, defense, or support. Fight
-        drones, hunt other trains, and defeat the OVERLORD bosses. Survive the wasteland.
-      </p>
-      <div class="controls">
-        <p><kbd>A</kbd><kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> — Turn</p>
-        <p><kbd>Space</kbd> — Boost (drains fuel)</p>
-        <p><kbd>S</kbd> or <kbd>↓</kbd> — Brake</p>
-        <p><kbd>Mouse</kbd> — Aim, hold click to fire</p>
+      <div class="join-panel">
+        <h1>LOCOMOTIVE WARS</h1>
+        <div class="subtitle">Slither-style train combat</div>
+        <p class="blurb">
+          Collect trailers to grow your train. Each trailer is a weapon, defense, or support. Fight
+          drones, hunt other trains, and defeat the OVERLORD bosses. Survive the wasteland.
+        </p>
+        <div class="controls">
+          <p><kbd>A</kbd><kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> — Turn</p>
+          <p><kbd>Space</kbd> — Boost (drains fuel)</p>
+          <p><kbd>S</kbd> or <kbd>↓</kbd> — Brake</p>
+          <p><kbd>Mouse</kbd> — Aim, hold click to fire</p>
+        </div>
+        <div id="join-highscores" class="hs-panel">
+          <h2>High scores</h2>
+          <table>
+            <tbody id="join-highscores-rows"></tbody>
+          </table>
+          <p id="join-highscores-empty">No scores yet. Be the first!</p>
+        </div>
+        <form id="join-form" autocomplete="off">
+          <label for="player-name">Your name</label>
+          <input
+            id="player-name"
+            type="text"
+            maxlength="16"
+            spellcheck="false"
+            placeholder="Player"
+          />
+          <button id="play-btn" type="submit">Play</button>
+        </form>
+        <div id="join-error" role="alert"></div>
       </div>
-      <div id="join-highscores" class="hs-panel">
-        <h2>High scores</h2>
-        <table>
-          <tbody id="join-highscores-rows"></tbody>
-        </table>
-        <p id="join-highscores-empty">No scores yet. Be the first!</p>
-      </div>
-      <form id="join-form" autocomplete="off">
-        <label for="player-name">Your name</label>
-        <input
-          id="player-name"
-          type="text"
-          maxlength="16"
-          spellcheck="false"
-          placeholder="Player"
-        />
-        <button id="play-btn" type="submit">Play</button>
-      </form>
-      <div id="join-error" role="alert"></div>
+      <footer id="join-footer">
+        <a
+          id="join-version"
+          href="https://github.com/carlhako/locomotive-wars/releases"
+          target="_blank"
+          rel="noopener noreferrer"
+        ></a>
+        <span class="sep">·</span>
+        <a
+          id="join-repo"
+          href="https://github.com/carlhako/locomotive-wars"
+          target="_blank"
+          rel="noopener noreferrer"
+          >GitHub</a
+        >
+      </footer>
     </div>
     <div id="round-overlay" class="overlay" style="display: none">
       <h1>ROUND OVER</h1>

@@ -24,7 +24,10 @@ export function createCamera(x = 0, y = 0): Camera {
   return { x, y, travelX: x, travelY: y };
 }
 
-/** Moves the camera towards a world point along the shortest wrapped route, smoothed over time. */
+/**
+ * Moves the camera towards a world point along the shortest wrapped route, smoothed over time.
+ * `smoothing` is the fraction of the remaining distance closed per 1/60 s.
+ */
 export function followCamera(
   camera: Camera,
   targetX: number,
@@ -32,8 +35,9 @@ export function followCamera(
   size: number,
   dt: number,
   snap = false,
+  smoothing = CAMERA_SMOOTHING,
 ): void {
-  const k = snap ? 1 : 1 - Math.pow(1 - CAMERA_SMOOTHING, Math.max(0, dt) * 60);
+  const k = snap ? 1 : 1 - Math.pow(1 - smoothing, Math.max(0, dt) * 60);
   const dx = wrapDelta(targetX - camera.x, size) * k;
   const dy = wrapDelta(targetY - camera.y, size) * k;
   camera.x = wrapPos(camera.x + dx, size);
@@ -77,6 +81,8 @@ export interface CanvasSurface {
   readonly height: number;
   /** Applies the device-pixel-ratio transform; call at the start of every frame. */
   begin(): void;
+  /** Stops tracking the window size. */
+  dispose(): void;
 }
 
 /** Sizes a canvas to the window (device-pixel aware) and keeps it sized on resize. */
@@ -105,6 +111,9 @@ export function setupCanvas(canvas: HTMLCanvasElement): CanvasSurface {
     },
     begin() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    },
+    dispose() {
+      window.removeEventListener('resize', resize);
     },
   };
 }

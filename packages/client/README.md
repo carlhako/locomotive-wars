@@ -21,6 +21,21 @@ overlay offers a Reconnect button, which joins afresh.
 For development without a server, open <http://localhost:5173/?offline>. Offline mode runs the
 shared simulation inside the page with six bots.
 
+### Home screen background
+
+While the join screen is up, a bots-only simulation plays behind it (`src/attract/`): eight bots
+on a 3000-unit map, each starting with 20 to 40 mostly-weapon carriages, and a destroyed bot comes
+back just as long. The camera follows the longest living train and pans to a new one when the
+leader is destroyed or another train gets at least 3 carriages longer. It draws on its own
+`#attract` canvas, reads no input and makes no sound, and it stops and removes its canvas as soon
+as the server accepts the join (a refused join leaves it running). If the browser prefers reduced
+motion, it draws a single still frame instead. `?offline` skips the join screen, so it has no
+background.
+
+The join screen's footer shows the client package's version at build time (`v0.3.0`, from
+`packages/client/package.json` through Vite's `define`), linking to that version's GitHub
+release, and a link to the repository.
+
 ## Controls
 
 | Input              | Action                                                           |
@@ -57,11 +72,14 @@ shared.
 ```
 src/
   main.ts          boot: ?offline starts an OfflineSession, otherwise the join screen and a NetSession
+  attract/world.ts the home screen background's bots-only World, respawns, and leader rule
+  attract/scene.ts draws that world behind the join screen; stopped when play starts
   loop.ts          Game: per-frame input -> source -> effects -> render
   source.ts        GameSource interface (the seam between world and presentation)
   offline.ts       local World + bots, 30 Hz accumulator, respawn on destruction
   net/             the online GameSource (see below)
   ui/              join screen (name field, storage) and disconnect overlay
+  ui/footer.ts     join screen footer: build version, release and repository links
   interpolate.ts   blends two views a tick apart (wrap-aware)
   input.ts         keyboard/mouse -> TrainInput
   render/          canvas (camera, wrapped projection), stars, train, bridge, enemies,
