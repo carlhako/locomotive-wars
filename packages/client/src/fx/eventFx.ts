@@ -3,6 +3,7 @@ import type { EnemyKind, SimEvent, WorldView } from '@lw/shared';
 import type { SoundPlayer } from '../audio/sound.ts';
 import type { BannerSink, ScreenFlashSink } from '../hud/banner.ts';
 import type { KillFeedSink } from '../hud/killfeed.ts';
+import type { PickupPopupSink } from '../hud/pickupPopup.ts';
 import { CARRIAGE_TYPES, HEAL_COLOR, HEART_COLORS } from '../render/palette.ts';
 import type { DamageNumberSink } from './damageNumbers.ts';
 import type { HitFlashSink } from './hitFlash.ts';
@@ -24,6 +25,8 @@ export interface FxTargets {
   healFlash: ScreenFlashSink;
   killFeed: KillFeedSink;
   banner: BannerSink;
+  /** Names each pickup the local train makes. */
+  pickups: PickupPopupSink;
   sound: SoundPlayer;
   turrets: TurretSink;
   zaps: ZapSink;
@@ -143,7 +146,7 @@ export function applyEvents(events: readonly SimEvent[], ctx: FxContext, fx: FxT
     return wrapDist(x, y, local.x, local.y, ctx.size) < AUDIBLE_RANGE;
   };
 
-  for (const e of events) {
+  for (const [index, e] of events.entries()) {
     switch (e.type) {
       case 'fired': {
         if (e.ownerKind !== 'train') break;
@@ -295,7 +298,26 @@ export function applyEvents(events: readonly SimEvent[], ctx: FxContext, fx: FxT
           },
           rand,
         );
-        if (e.trainId === localId) fx.sound.pickup();
+        if (e.trainId === localId) {
+          fx.sound.pickup();
+          if (!e.added) {
+            fx.pickups.add({ kind: e.carriage, count: 0, full: true });
+          } else {
+            // The view is post-tick, so it already holds every carriage this batch added:
+            // take back the later same-type pickups to get the count as of this one.
+            const later = events
+              .slice(index + 1)
+              .filter(
+                (o) =>
+                  o.type === 'pickup' &&
+                  o.trainId === localId &&
+                  o.added &&
+                  o.carriage === e.carriage,
+              ).length;
+            const owned = local?.carriages.filter((c) => c.kind === e.carriage).length ?? 1;
+            fx.pickups.add({ kind: e.carriage, count: Math.max(1, owned - later), full: false });
+          }
+        }
         break;
       }
 

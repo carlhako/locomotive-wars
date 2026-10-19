@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { MAP_SIZE, viewFromWorld, World } from '@lw/shared';
-import type { ProjectileKind, SimEvent } from '@lw/shared';
+import type { CarriageKind, PickupKind, ProjectileKind, SimEvent, WorldView } from '@lw/shared';
 import type { SoundPlayer } from '../audio/sound.ts';
 import type { BannerSink } from '../hud/banner.ts';
 import type { KillFeedEntry } from '../hud/killfeed.ts';
+import type { PickupLine } from '../hud/pickupPopup.ts';
 import { HEAL_COLOR } from '../render/palette.ts';
 import { applyEvents, NameBook } from './eventFx.ts';
 import type { FxContext, FxTargets } from './eventFx.ts';
@@ -19,6 +20,7 @@ interface Recorded {
   feed: KillFeedEntry[];
   banners: { text: string; sub: string; color: string }[];
   popups: { text: string; color: string }[];
+  pickupLines: PickupLine[];
   sounds: string[];
   turrets: { trainId: number; carriage: number; angle: number }[];
   zaps: Array<ReadonlyArray<readonly [number, number]>>;
@@ -35,6 +37,7 @@ function recorder(): { fx: FxTargets; rec: Recorded } {
     feed: [],
     banners: [],
     popups: [],
+    pickupLines: [],
     sounds: [],
     turrets: [],
     zaps: [],
@@ -78,6 +81,7 @@ function recorder(): { fx: FxTargets; rec: Recorded } {
     },
     killFeed: { add: (e) => rec.feed.push(e) },
     banner,
+    pickups: { add: (line) => rec.pickupLines.push(line) },
     sound,
     turrets: { aim: (trainId, carriage, angle) => rec.turrets.push({ trainId, carriage, angle }) },
     zaps: { add: (points) => rec.zaps.push(points) },
@@ -510,6 +514,87 @@ describe('applyEvents', () => {
     );
 
     expect(rec.sounds).toEqual(['bridgeOn', 'pickup']);
+  });
+
+  describe('pickup popup lines', () => {
+    const pickup = (trainId: number, carriage: PickupKind, added = true): SimEvent => ({
+      type: 'pickup',
+      trainId,
+      pickupId: 1,
+      carriage,
+      source: 'trailer',
+      added,
+      x: 1000,
+      y: 1000,
+    });
+
+    /** The scene's view with the local train holding exactly these carriages. */
+    function holding(kinds: CarriageKind[]) {
+      const { me, rival, ctx } = scene();
+      const view: WorldView = {
+        ...ctx.view,
+        trains: ctx.view.trains.map((t) =>
+          t.id === me.id
+            ? { ...t, carriages: kinds.map((kind) => ({ kind, x: 0, y: 0, angle: 0 })) }
+            : t,
+        ),
+      };
+      return { me, rival, ctx: { ...ctx, view } };
+    }
+
+    it('gives count 1 for the first of a type', () => {
+      const { me, ctx } = holding(['locomotive', 'laser']);
+      const { fx, rec } = recorder();
+
+      applyEvents([pickup(me.id, 'laser')], ctx, fx);
+
+      expect(rec.pickupLines).toEqual([{ kind: 'laser', count: 1, full: false }]);
+    });
+
+    it('gives the train count for a duplicate', () => {
+      const { me, ctx } = holding(['locomotive', 'laser', 'mg', 'laser', 'laser']);
+      const { fx, rec } = recorder();
+
+      applyEvents([pickup(me.id, 'laser')], ctx, fx);
+
+      expect(rec.pickupLines).toEqual([{ kind: 'laser', count: 3, full: false }]);
+    });
+
+    it('counts two same-type pickups in one batch as 1 then 2', () => {
+      const { me, ctx } = holding(['locomotive', 'shield', 'shield']);
+      const { fx, rec } = recorder();
+
+      applyEvents([pickup(me.id, 'shield'), pickup(me.id, 'shield')], ctx, fx);
+
+      expect(rec.pickupLines.map((l) => l.count)).toEqual([1, 2]);
+    });
+
+    it('marks a pickup that added nothing as full', () => {
+      const { me, ctx } = holding(['locomotive', 'mg']);
+      const { fx, rec } = recorder();
+
+      applyEvents([pickup(me.id, 'missile', false)], ctx, fx);
+
+      expect(rec.pickupLines).toEqual([{ kind: 'missile', count: 0, full: true }]);
+    });
+
+    it('never counts below 1 when the view is a carriage behind', () => {
+      const { me, ctx } = holding(['locomotive']);
+      const { fx, rec } = recorder();
+
+      applyEvents([pickup(me.id, 'laser')], ctx, fx);
+
+      expect(rec.pickupLines).toEqual([{ kind: 'laser', count: 1, full: false }]);
+    });
+
+    it('adds no line for a rival or a bot', () => {
+      const { rival, ctx } = holding(['locomotive', 'laser']);
+      const { fx, rec } = recorder();
+
+      applyEvents([pickup(rival.id, 'laser'), pickup(rival.id, 'mg', false)], ctx, fx);
+
+      expect(rec.pickupLines).toEqual([]);
+    });
   });
 
   it('shows heart particles, a green +250, a green flash, and the full-heal sound', () => {

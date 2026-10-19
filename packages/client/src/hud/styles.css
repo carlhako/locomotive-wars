@@ -365,6 +365,46 @@ body:not(.playing) #heal-flash {
 #combo.show {
   opacity: 1;
 }
+#pickups {
+  position: absolute;
+  top: 62%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  font-family: monospace;
+  z-index: 11;
+}
+.pickup-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.pickup-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: bold;
+  color: #000;
+}
+.pickup-name {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-shadow: 0 0 10px currentColor;
+}
+.pickup-detail {
+  font-size: 12px;
+  color: #bbb;
+}
 #damage-flash {
   position: absolute;
   top: 0;

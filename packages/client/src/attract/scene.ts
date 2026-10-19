@@ -102,6 +102,7 @@ export function startAttract(options: AttractOptions): AttractScene {
     healFlash: { show: ignore },
     killFeed: { add: ignore },
     banner: { show: ignore, popup: ignore },
+    pickups: { add: ignore },
     sound: SILENT,
     turrets,
     zaps,

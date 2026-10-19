@@ -24,6 +24,7 @@ describe('effects soak', () => {
       healFlash: { show: () => {} },
       killFeed,
       banner: { show: () => {}, popup: () => {} },
+      pickups: { add: () => {} },
       sound: {
         shoot: () => {},
         hit: () => {},

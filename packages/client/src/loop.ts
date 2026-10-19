@@ -10,6 +10,7 @@ import { Zaps } from './fx/zaps.ts';
 import { Banner, DamageFlash } from './hud/banner.ts';
 import { bindMuteButton, Hud } from './hud/hud.ts';
 import { KillFeed, KillFeedView } from './hud/killfeed.ts';
+import { PickupPopup, PickupPopupView } from './hud/pickupPopup.ts';
 import { DomLegendView, Legend } from './hud/legend.ts';
 import {
   boardFromView,
@@ -72,6 +73,8 @@ export class Game {
   private readonly names = new NameBook();
   private readonly killFeed = new KillFeed();
   private readonly killFeedView: KillFeedView;
+  private readonly pickupPopup = new PickupPopup();
+  private readonly pickupPopupView: PickupPopupView;
   private readonly banner: Banner;
   private readonly damageFlash: DamageFlash;
   private readonly healFlash: DamageFlash;
@@ -94,6 +97,7 @@ export class Game {
     this.roundOverlay.onSubmitName((name) => source.submitHighScoreName?.(name));
     this.particles = new ParticleSystem(MAX_PARTICLES, source.mapSize);
     this.killFeedView = new KillFeedView(el('killfeed'), this.killFeed);
+    this.pickupPopupView = new PickupPopupView(el('pickups'), this.pickupPopup);
     this.banner = new Banner(el('banner'), el('combo'));
     this.damageFlash = new DamageFlash(el('damage-flash'));
     this.healFlash = new DamageFlash(el('heal-flash'));
@@ -106,6 +110,7 @@ export class Game {
       healFlash: this.healFlash,
       killFeed: this.killFeed,
       banner: this.banner,
+      pickups: this.pickupPopup,
       sound: this.sound,
       turrets: this.turrets,
       zaps: this.zaps,
@@ -190,6 +195,7 @@ export class Game {
     this.bridges.update(view.trains, dt);
     this.shake.update(dt);
     this.killFeed.update(dt);
+    this.pickupPopup.update(dt);
     this.banner.update(dt);
     this.damageFlash.update(dt);
     this.healFlash.update(dt);
@@ -228,6 +234,7 @@ export class Game {
       offer: this.source.highScoreOffer?.() ?? null,
     });
     this.killFeedView.render();
+    this.pickupPopupView.render();
   }
 
   private resetEffects(): void {
@@ -237,6 +244,7 @@ export class Game {
     this.turrets.clear();
     this.zaps.clear();
     this.killFeed.clear();
+    this.pickupPopup.clear();
     this.names.clear();
   }
 
