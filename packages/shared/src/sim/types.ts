@@ -77,6 +77,12 @@ export interface BotState {
   /** Position being steered at in seek and wander modes. */
   targetX: number;
   targetY: number;
+  /** Side a coiling bot turns to (−1 or +1); 0 when not coiled. */
+  coilTurn: number;
+  /** Seconds left of a lapse, during which the bot keeps its chosen input despite danger. */
+  lapseTimer: number;
+  /** Whether the chosen path was blocked on the previous tick. */
+  blocked: boolean;
 }
 
 export interface TrainState {
@@ -324,6 +330,11 @@ export interface WorldOptions {
   maxSlowHearts?: number;
   /** Full hearts the world spawns and keeps up to. Default 1. */
   maxFullHearts?: number;
+  /**
+   * How well bots avoid other trains' bodies, from 0 (the reference AI, no avoidance) to 1
+   * (never slips). Clamped to that range. Default 0.7.
+   */
+  botSkill?: number;
 }
 
 export type ResolvedWorldOptions = Required<WorldOptions>;

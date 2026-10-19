@@ -11,6 +11,7 @@ const botsShape = {
   fillTo: int(0, 100).default(12),
   min: int(0, 100).default(0),
   max: int(0, 100).default(10),
+  skill: z.number().min(0).max(1).default(0.7),
 };
 
 const botsSchema = z.object(botsShape).superRefine((bots, ctx) => {

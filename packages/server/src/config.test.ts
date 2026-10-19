@@ -27,7 +27,7 @@ describe('defaults', () => {
       roundLengthSec: 600,
       intermissionSec: 20,
       idleKickSec: 60,
-      bots: { fillTo: 12, min: 0, max: 10 },
+      bots: { fillTo: 12, min: 0, max: 10, skill: 0.7 },
       highscores: { size: 10, file: 'data/highscores.json' },
       maxCarriages: 150,
       tickRate: 30,
@@ -57,7 +57,7 @@ describe('partial config', () => {
 
   it('fills missing bots keys', () => {
     const r = parseConfig({ bots: { fillTo: 8, max: 5 } });
-    expect(r.ok && r.config.bots).toEqual({ fillTo: 8, min: 0, max: 5 });
+    expect(r.ok && r.config.bots).toEqual({ fillTo: 8, min: 0, max: 5, skill: 0.7 });
   });
 });
 
@@ -98,6 +98,16 @@ describe('validation', () => {
   it('fills a missing highscores key', () => {
     const r = parseConfig({ highscores: { size: 5 } });
     expect(r.ok && r.config.highscores).toEqual({ size: 5, file: 'data/highscores.json' });
+  });
+
+  it('accepts bots.skill from 0 to 1 and rejects 1.5', () => {
+    const zero = parseConfig({ bots: { skill: 0 } });
+    expect(zero.ok && zero.config.bots.skill).toBe(0);
+    expect(parseConfig({ bots: { skill: 1 } }).ok).toBe(true);
+    const r = parseConfig({ bots: { skill: 1.5 } });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors[0]).toMatch(/^bots\.skill:/);
   });
 
   it('requires bots.min <= bots.max', () => {

@@ -4,7 +4,7 @@
   "roundLengthSec": 600,
   "intermissionSec": 20,
   "idleKickSec": 60,
-  "bots": { "fillTo": 12, "min": 0, "max": 10 },
+  "bots": { "fillTo": 12, "min": 0, "max": 10, "skill": 0.7 },
   "highscores": { "size": 10, "file": "data/highscores.json" },
   "maxCarriages": 150,
   "tickRate": 30,

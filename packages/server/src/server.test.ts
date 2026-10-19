@@ -456,3 +456,13 @@ describe('tick rate', () => {
     expect(ticks).toBeLessThan(65);
   });
 });
+
+describe('bot skill', () => {
+  it('gives the world the configured bot skill', async () => {
+    await start({ config: { bots: { fillTo: 0, skill: 0 } } });
+    expect(server!.world.options.botSkill).toBe(0);
+    await server!.close();
+    await start({ config: NO_BOTS });
+    expect(server!.world.options.botSkill).toBe(0.7);
+  });
+});

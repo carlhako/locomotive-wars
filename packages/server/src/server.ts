@@ -107,6 +107,7 @@ export class GameServer {
       ...opts.world,
       tickRate: config.tickRate,
       maxCarriages: config.maxCarriages,
+      botSkill: config.bots.skill,
     });
     const rate = config.tickRate;
     this.stepMs = 1000 / rate;

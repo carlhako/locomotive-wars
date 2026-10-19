@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { emptyWorld } from './testing.ts';
 import { World } from './world.ts';
 
 /** 32-bit FNV-1a of a string, as 8 hex digits. */
@@ -36,8 +37,8 @@ function tickDigest(world: World): string {
 }
 
 /** The soak world from `bot.test.ts`: 8 bots with mixed starting carriages on a fixed seed. */
-function botWorld(): World {
-  const world = new World({ seed: 12345 });
+function botWorld(botSkill: number): World {
+  const world = new World({ seed: 12345, botSkill });
   for (let i = 0; i < 8; i++) {
     world.addTrain({
       protectedFor: 0,
@@ -49,8 +50,29 @@ function botWorld(): World {
 }
 
 describe('bot skill', () => {
+  it('defaults to 0.7', () => {
+    expect(new World().options.botSkill).toBe(0.7);
+  });
+
+  it('is clamped to [0, 1]', () => {
+    expect(new World({ botSkill: 1.5 }).options.botSkill).toBe(1);
+    expect(new World({ botSkill: -1 }).options.botSkill).toBe(0);
+    expect(new World({ botSkill: 0.4 }).options.botSkill).toBe(0.4);
+  });
+
+  it('new and respawned trains start with no coil, lapse, or block', () => {
+    const world = emptyWorld();
+    const bot = world.addTrain({ controller: 'bot' });
+    expect(bot.ai).toMatchObject({ coilTurn: 0, lapseTimer: 0, blocked: false });
+    bot.ai.coilTurn = 1;
+    bot.ai.lapseTimer = 0.3;
+    bot.ai.blocked = true;
+    world.respawnTrain(bot.id);
+    expect(bot.ai).toMatchObject({ coilTurn: 0, lapseTimer: 0, blocked: false });
+  });
+
   it('skill 0 matches the pre-skill controller', () => {
-    const world = botWorld();
+    const world = botWorld(0);
     // A hash per tick keeps the snapshot small while still showing the first tick that differs.
     const hashes: string[] = [];
     for (let i = 0; i < 600; i++) {

@@ -176,27 +176,29 @@ A server installed with the [deploy script](#deploy-to-a-debian-server-or-lxc-co
 
 <!-- config-keys:start -->
 
-| Key               | Default                | Allowed                     | Meaning                                                                      |
-| ----------------- | ---------------------- | --------------------------- | ---------------------------------------------------------------------------- |
-| `port`            | `8080`                 | 0 to 65535                  | TCP port to listen on                                                        |
-| `maxPlayers`      | `16`                   | 1 to 100                    | Most human players connected at once; more are refused as full               |
-| `roundLengthSec`  | `600`                  | 30 to 7200                  | Length of a round                                                            |
-| `intermissionSec` | `20`                   | 5 to 300                    | Pause between rounds, showing the standings                                  |
-| `idleKickSec`     | `60`                   | `0` (off), or 20 to 3600    | Kick a player who stops steering this long (warned 10 s before)              |
-| `bots.fillTo`     | `12`                   | 0 to 100                    | Bots fill the world up to this many trains in all, humans included           |
-| `bots.min`        | `0`                    | 0 to `bots.max`             | Fewest bots, however many humans are connected                               |
-| `bots.max`        | `10`                   | 0 to 100                    | Most bots                                                                    |
-| `highscores.size` | `10`                   | 1 to 100                    | Entries kept in the all-time high score table                                |
-| `highscores.file` | `data/highscores.json` | any path                    | Where the table is stored; a relative path is read from the config directory |
-| `maxCarriages`    | `150`                  | 10 to 500                   | Longest a train can grow, locomotive included                                |
-| `tickRate`        | `30`                   | 10 to 60                    | Simulation steps per second                                                  |
-| `snapshotRate`    | `15`                   | 1 to `tickRate`, divides it | Snapshots sent per client per second                                         |
-| `viewRadius`      | `1600`                 | 500 to 5000                 | How far from its train a client sees, in world units                         |
+| Key               | Default                | Allowed                     | Meaning                                                                         |
+| ----------------- | ---------------------- | --------------------------- | ------------------------------------------------------------------------------- |
+| `port`            | `8080`                 | 0 to 65535                  | TCP port to listen on                                                           |
+| `maxPlayers`      | `16`                   | 1 to 100                    | Most human players connected at once; more are refused as full                  |
+| `roundLengthSec`  | `600`                  | 30 to 7200                  | Length of a round                                                               |
+| `intermissionSec` | `20`                   | 5 to 300                    | Pause between rounds, showing the standings                                     |
+| `idleKickSec`     | `60`                   | `0` (off), or 20 to 3600    | Kick a player who stops steering this long (warned 10 s before)                 |
+| `bots.fillTo`     | `12`                   | 0 to 100                    | Bots fill the world up to this many trains in all, humans included              |
+| `bots.min`        | `0`                    | 0 to `bots.max`             | Fewest bots, however many humans are connected                                  |
+| `bots.max`        | `10`                   | 0 to 100                    | Most bots                                                                       |
+| `bots.skill`      | `0.7`                  | 0 to 1                      | How well bots avoid other trains' bodies; 0 is the original bots, 1 never slips |
+| `highscores.size` | `10`                   | 1 to 100                    | Entries kept in the all-time high score table                                   |
+| `highscores.file` | `data/highscores.json` | any path                    | Where the table is stored; a relative path is read from the config directory    |
+| `maxCarriages`    | `150`                  | 10 to 500                   | Longest a train can grow, locomotive included                                   |
+| `tickRate`        | `30`                   | 10 to 60                    | Simulation steps per second                                                     |
+| `snapshotRate`    | `15`                   | 1 to `tickRate`, divides it | Snapshots sent per client per second                                            |
+| `viewRadius`      | `1600`                 | 500 to 5000                 | How far from its train a client sees, in world units                            |
 
 <!-- config-keys:end -->
 
 The number of bots is `clamp(bots.fillTo - humans, bots.min, bots.max)`; set `bots.fillTo` and
-`bots.min` to `0` for no bots.
+`bots.min` to `0` for no bots. Like every setting, `bots.skill` takes effect when the server
+restarts.
 
 High scores live in `highscores.file` and are served at `GET /api/highscores`. To edit or reset
 them, stop the server, edit or delete the file, and start it again. A damaged file is renamed to

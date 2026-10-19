@@ -418,3 +418,28 @@ export const BOT_WANDER_MARGIN = 200;
 export const BOT_TURN_GAIN = 2;
 /** new: bots only boost above this fuel, so they do not flicker at an empty tank. */
 export const BOT_BOOST_MIN_FUEL = 5;
+
+// ===== Bot skill (body avoidance) =====
+/** new: world bot skill when none is given, 0 (the reference AI) to 1 (never slips). */
+export const DEFAULT_BOT_SKILL = 0.7;
+/** new: seconds of path a bot predicts per unit of skill. */
+export const BOT_AVOID_LOOKAHEAD = 0.6;
+/** new: safety margin added to the body collision radius is skill × this − the offset, at least 0. */
+export const BOT_AVOID_MARGIN = 12;
+export const BOT_AVOID_MARGIN_OFFSET = 2;
+/** new: bots at or above this skill also try boosting out of danger. */
+export const BOT_AVOID_BOOST_SKILL = 0.9;
+/** new: chance of a lapse per blocked episode is (1 − skill) × this. */
+export const BOT_LAPSE_CHANCE = 0.6;
+/** new: seconds a lapsing bot keeps its chosen input before avoiding. */
+export const BOT_LAPSE_TIME = 0.4;
+/** new: ticks between samples of a predicted path. */
+export const BOT_AVOID_SAMPLE_TICKS = 2;
+/** new: cost of braking in an avoidance choice, in radians of heading error. */
+export const BOT_AVOID_BRAKE_COST = 0.2;
+/** new: cost of boosting in an avoidance choice, in radians of heading error. */
+export const BOT_AVOID_BOOST_COST = 0.3;
+/** new: cost removed per unit of clearance beyond the blocking distance, to favour open space. */
+export const BOT_AVOID_CLEARANCE_BONUS = 0.002;
+/** new: clearance beyond this many units earns no further bonus. */
+export const BOT_AVOID_CLEARANCE_CAP = 50;

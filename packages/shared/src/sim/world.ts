@@ -12,6 +12,7 @@ import {
   BOSS_INTERVAL,
   BOSS_REPEAT_FACTOR,
   BOSS_START_GATE,
+  DEFAULT_BOT_SKILL,
   DROP_LIFETIME,
   ENEMY_RESPAWN,
   ENEMY_RESPAWN_MIN,
@@ -116,6 +117,7 @@ export class World {
       boss: options.boss ?? true,
       maxSlowHearts: options.maxSlowHearts ?? MAX_SLOW_HEARTS,
       maxFullHearts: options.maxFullHearts ?? MAX_FULL_HEARTS,
+      botSkill: clamp(options.botSkill ?? DEFAULT_BOT_SKILL, 0, 1),
     };
     this.rng = new Rng(this.options.seed);
     this.dt = 1 / this.options.tickRate;
