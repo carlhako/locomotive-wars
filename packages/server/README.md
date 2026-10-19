@@ -57,6 +57,11 @@ Everything else is in the config file; see "Running a server" in the
 curl http://localhost:8080/healthz
 ```
 
+Browsers must check the client's index page with the server on every load (`Cache-Control:
+no-cache`, answered with a `304` while its ETag still matches), so a player gets the new build as
+soon as the server is upgraded. Files under `/assets/` are named by their content hash, so they are
+cached for a year as `immutable`.
+
 ## What it does
 
 - **One world.** `GameServer` (`src/server.ts`) owns a `World` and steps it from `FixedStepLoop`

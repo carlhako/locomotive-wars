@@ -28,12 +28,27 @@ const NOT_BUILT =
   'The game client has not been built. Run `npm run build`, or use `npm run dev` and open the Vite URL.\n';
 
 /**
+ * Caching for the built client. Vite names everything under `/assets/` by its content hash, so
+ * those files never change and can be kept for good. Everything else, the index page above all,
+ * must be checked with the server (by ETag) on every load; otherwise a browser can keep the old
+ * index after an upgrade and go on loading the old bundle.
+ */
+export function cacheControlFor(pathname: string): string {
+  return pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache';
+}
+
+/**
  * Serves `GET /healthz`, `GET /api/highscores`, and the built client. Files are looked up in a list taken when the
  * server starts, so a request path can never reach outside the client directory.
  */
 export function createHttpHandler(opts: HttpOptions): Handler {
   const files = existsSync(opts.clientDir)
-    ? sirv(opts.clientDir, { etag: true, gzip: true, brotli: true })
+    ? sirv(opts.clientDir, {
+        etag: true,
+        gzip: true,
+        brotli: true,
+        setHeaders: (res, pathname) => res.setHeader('Cache-Control', cacheControlFor(pathname)),
+      })
     : null;
 
   return (req, res) => {

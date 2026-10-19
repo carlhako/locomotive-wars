@@ -25,12 +25,16 @@ export function emptyWorld(): World {
   });
 }
 
-/** A client directory holding an index page, with a secret one level above it. */
+/**
+ * A client directory holding an index page and a content-hashed asset, as Vite builds it, with a
+ * secret one level above it.
+ */
 export function makeClientDir(): { dir: string; secretName: string } {
   const root = mkdtempSync(join(tmpdir(), 'lw-server-test-'));
   const dir = join(root, 'dist');
-  mkdirSync(dir);
+  mkdirSync(join(dir, 'assets'), { recursive: true });
   writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Locomotive Wars</title>');
+  writeFileSync(join(dir, 'assets', 'index-AbC123.js'), 'console.log("lw");');
   writeFileSync(join(root, 'secret.txt'), 'top secret');
   return { dir, secretName: 'secret.txt' };
 }

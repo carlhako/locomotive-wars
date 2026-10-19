@@ -22,6 +22,22 @@ describe('http', () => {
     expect(await res.text()).toContain('Locomotive Wars');
   });
 
+  it('makes browsers revalidate the index page, so an upgrade is picked up on the next load', async () => {
+    const port = await start();
+    for (const path of ['/', '/index.html']) {
+      const res = await fetch(`http://127.0.0.1:${port}${path}`);
+      expect(res.headers.get('cache-control')).toBe('no-cache');
+      expect(res.headers.get('etag')).toBeTruthy();
+    }
+  });
+
+  it('lets browsers keep content-hashed assets for good', async () => {
+    const port = await start();
+    const res = await fetch(`http://127.0.0.1:${port}/assets/index-AbC123.js`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+  });
+
   it('answers /healthz with status, humans, bots, and tick', async () => {
     const port = await start();
     const res = await fetch(`http://127.0.0.1:${port}/healthz`);
