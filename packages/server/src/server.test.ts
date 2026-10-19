@@ -457,6 +457,20 @@ describe('tick rate', () => {
   });
 });
 
+describe('compression', () => {
+  it('negotiates permessage-deflate by default', async () => {
+    const port = await start({ config: NO_BOTS });
+    const c = await join(port);
+    expect(c.ws.extensions).toContain('permessage-deflate');
+  });
+
+  it('sends uncompressed when compression is off', async () => {
+    const port = await start({ config: NO_BOTS, compress: false });
+    const c = await join(port);
+    expect(c.ws.extensions).toBe('');
+  });
+});
+
 describe('bot skill', () => {
   it('gives the world the configured bot skill', async () => {
     await start({ config: { bots: { fillTo: 0, skill: 0 } } });

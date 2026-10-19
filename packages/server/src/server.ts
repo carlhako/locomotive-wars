@@ -49,7 +49,7 @@ export interface GameServerOptions {
   config?: ServerConfig;
   /** World options beyond the config's (seed, spawn counts); the config's tick rate and carriage limit win. */
   world?: WorldOptions;
-  /** Compress WebSocket messages over 1 KB (`permessage-deflate`). Default off. */
+  /** Compress WebSocket messages over 1 KB (`permessage-deflate`) for clients that accept it. Default on. */
   compress?: boolean;
   log?: (message: string) => void;
   /** Where the high score table is kept. Default: in memory only, lost when the server stops. */
@@ -149,7 +149,7 @@ export class GameServer {
     this.wss = new WebSocketServer({
       noServer: true,
       maxPayload: MAX_CLIENT_MESSAGE_BYTES,
-      perMessageDeflate: opts.compress ? { threshold: 1024 } : false,
+      perMessageDeflate: (opts.compress ?? true) ? { threshold: 1024 } : false,
     });
     this.http.on('upgrade', (req, socket, head) => {
       const path = (req.url ?? '').split('?')[0];

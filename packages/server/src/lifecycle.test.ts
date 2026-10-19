@@ -104,6 +104,8 @@ describe('round lifecycle', () => {
   it('ends a round on time, freezes the world, then starts the next round fresh', async () => {
     const port = await start({ roundLengthSec: 30, intermissionSec: 5 });
     const c = await join(port, 'Casey');
+    // The round message follows the welcome; compressed messages are inflated asynchronously.
+    await c.waitFor(() => c.of('round').length > 0);
     expect(c.of('round')).toHaveLength(1);
     expect(c.of('round')[0]).toMatchObject({ phase: 'playing', roundId: 1 });
 

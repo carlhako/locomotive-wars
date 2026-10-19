@@ -75,5 +75,5 @@
 ## 7. Integration checks
 
 - [x] 7.1 Run `npm run lint` and `npm run typecheck`, and verify both pass.
-- [ ] 7.2 Run `SOAK_CARRIAGES=mg,mg,armor,speed,mg,mg,flak,mg npm run soak -w @lw/server` (60 s, 10 bots, 16 clients). Verify that it reports the tick rate within 1% of 30 and passes.
+- [x] 7.2 Run `SOAK_CARRIAGES=mg,mg,armor,speed,mg,mg,flak,mg npm run soak -w @lw/server` (60 s, 10 bots, 16 clients). Verify that it reports the tick rate within 1% of 30 and passes.
 - [x] 7.3 Start the client dev server and open the home page, where the attract background runs bots at the default skill. Verify with a screenshot that bots move and fire, and that the console has no errors.

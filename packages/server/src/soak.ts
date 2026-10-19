@@ -11,7 +11,7 @@ import { GameServer } from './server.ts';
  *   npm run soak -w @lw/server
  *
  * Environment: SOAK_SECONDS (60), SOAK_CLIENTS (16), SOAK_BOTS (10, in-process server only),
- * SOAK_COMPRESS=1 (enable permessage-deflate, in-process server only), SOAK_CARRIAGES (comma-
+ * SOAK_COMPRESS=0 (turn off permessage-deflate, in-process server only), SOAK_CARRIAGES (comma-
  * separated carriage kinds added to every train each time it spawns, in-process server only),
  * SOAK_URL (test an already-running server, such as http://localhost:8080, instead of starting
  * one).
@@ -24,7 +24,7 @@ import { GameServer } from './server.ts';
 const SECONDS = Number(process.env.SOAK_SECONDS ?? 60);
 const CLIENTS = Number(process.env.SOAK_CLIENTS ?? 16);
 const BOTS = Number(process.env.SOAK_BOTS ?? 10);
-const COMPRESS = process.env.SOAK_COMPRESS === '1';
+const COMPRESS = process.env.SOAK_COMPRESS !== '0';
 const EXTERNAL = process.env.SOAK_URL;
 const CARRIAGES = (process.env.SOAK_CARRIAGES ?? '')
   .split(',')
