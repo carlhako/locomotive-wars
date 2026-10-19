@@ -32,7 +32,7 @@ as the server accepts the join (a refused join leaves it running). If the browse
 motion, it draws a single still frame instead. `?offline` skips the join screen, so it has no
 background.
 
-The join screen's footer shows the client package's version at build time (`v0.3.0`, from
+The join screen's footer shows the client package's version at build time (`v0.3.1`, from
 `packages/client/package.json` through Vite's `define`), linking to that version's GitHub
 release, and a link to the repository.
 

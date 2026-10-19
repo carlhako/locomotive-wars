@@ -12,7 +12,7 @@ Node 22 (see [`.nvmrc`](.nvmrc)) and npm 10 or newer.
 From a [release](https://github.com/carlhako/locomotive-wars/releases) package (already built):
 
 ```bash
-tar xzf locomotive-wars-0.3.0.tar.gz && cd locomotive-wars-0.3.0
+tar xzf locomotive-wars-0.3.1.tar.gz && cd locomotive-wars-0.3.1
 npm ci --omit=dev
 npm start -w @lw/server
 ```
