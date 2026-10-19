@@ -28,6 +28,33 @@ npm start -w @lw/server
 The server serves the game and its WebSocket on one port (default 8080), so players browse to
 `http://<host>:8080`. Put a TLS reverse proxy in front of it for `https`.
 
+### Install as a service on Debian or an LXC container
+
+[`deploy/install.sh`](deploy/install.sh) installs Node.js and the latest release under
+`/opt/locomotive-wars`, creates a `locomotive-wars` user, and runs the game as the
+`locomotive-wars` systemd service, started on boot. As root (a fresh Debian LXC lacks curl, so run
+`apt-get update && apt-get install -y curl` first):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/carlhako/locomotive-wars/main/deploy/install.sh | bash
+```
+
+Run the same command again to upgrade: it installs a newer release or Node.js patch if there is
+one, and puts the previous version back if the new one does not start. The config is
+`/etc/locomotive-wars/config.json` (written on first install, then left alone; restart the service
+after editing it) and the high scores are kept in `/var/lib/locomotive-wars/highscores.json`.
+Logs: `journalctl -u locomotive-wars`.
+
+To bring the high scores over from another server, give the installer that server's table, either
+its URL or a copy of its `highscores.json`. Entries already in the table are skipped, so this is
+safe to repeat:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/carlhako/locomotive-wars/main/deploy/install.sh | LW_IMPORT_HIGHSCORES=http://old-host:8080/api/highscores bash
+```
+
+`RELEASE_TAG=v0.3.0` installs a particular release, and `LW_TARBALL=<file>` a downloaded one.
+
 ## Configure
 
 Copy [`config.example.json`](config.example.json) to `config.json` in the project root (or point
