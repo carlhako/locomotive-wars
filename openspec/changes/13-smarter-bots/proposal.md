@@ -11,7 +11,7 @@ Bots are easy to farm. The bot controller only looks at other trains' heads and 
 - **Body avoidance.** Each tick, before using its chosen input, a bot checks a short look-ahead of where that input takes its head against other trains' bodies.
   - If the path is clear, the input is used unchanged, so behaviour away from danger is the same as today.
   - If it is blocked, the bot picks the best clear alternative from a few candidate turns, with and without the brake. At high skill it also tries boosting through a closing gap.
-- **Coil fallback.** When no candidate is clear, the bot turns hard and brakes, circling tightly inside its own body (its own carriages are harmless). It stays coiled until a way out is clear, then leaves. A long coiled bot forms a lethal ring around its head.
+- **Coil fallback.** When no candidate is clear, the bot takes the candidate that reaches danger last. In a tight spot that is usually a hard, braked turn, circling inside its own body (its own carriages are harmless). It stays coiled until a way out is clear, then leaves. A long coiled bot forms a lethal ring around its head.
 - **Lapses.** Below top skill, a bot sometimes reacts late when danger appears. The chance comes from the world's seeded random source, so mid-skill bots stay beatable and the simulation stays deterministic.
 
 **Skill setting**

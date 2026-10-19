@@ -106,7 +106,8 @@ const obstacles: number[] = [];
 /**
  * The body-avoidance step. Predicts the path of the input the mode logic chose and keeps it when
  * clear of other trains' carriages; otherwise picks the cheapest clear alternative turn (braked
- * or boosted where that helps), or coils (full turn and brake) when nothing is clear. On the tick
+ * or boosted where that helps), or, when nothing is clear, coils: takes the blocked move that
+ * reaches danger last, which in a tight spot is usually a braked full turn. On the tick
  * the chosen path first becomes blocked, a bot below skill 1 may lapse and keep its chosen input
  * for `BOT_LAPSE_TIME`.
  */
@@ -155,9 +156,9 @@ function avoid(
 
   let best: Move | null = null;
   let bestCost = Infinity;
-  // The side to coil toward: the turn sign of the blocked move that makes contact latest, and
-  // least deeply on a tie.
-  let coilSide = Math.sign(chosen.turn);
+  // With nothing clear, the fallback is the blocked move that makes contact latest, and least
+  // deeply on a tie.
+  let fallback: Move = chosen;
   let latest = first.contact;
   let latestNearest = first.nearest;
   for (const move of moves) {
@@ -172,13 +173,10 @@ function avoid(
         bestCost = cost;
         best = move;
       }
-    } else if (
-      move.turn !== 0 &&
-      (p.contact > latest || (p.contact === latest && p.nearest > latestNearest))
-    ) {
+    } else if (p.contact > latest || (p.contact === latest && p.nearest > latestNearest)) {
       latest = p.contact;
       latestNearest = p.nearest;
-      coilSide = Math.sign(move.turn);
+      fallback = move;
     }
   }
 
@@ -186,8 +184,8 @@ function avoid(
     ai.coilTurn = 0;
     return { ...chosen, turn: best.turn, boost: best.boost, brake: best.brake };
   }
-  if (ai.coilTurn === 0) ai.coilTurn = coilSide === 0 ? 1 : coilSide;
-  return { ...chosen, turn: ai.coilTurn, boost: false, brake: true };
+  ai.coilTurn = fallback.turn < 0 ? -1 : 1;
+  return { ...chosen, turn: fallback.turn, boost: fallback.boost, brake: fallback.brake };
 }
 
 /** Lapse timers below this many seconds count as run out. */

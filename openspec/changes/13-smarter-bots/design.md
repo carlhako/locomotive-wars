@@ -80,10 +80,11 @@
 
 ### 5. Coil
 
-- When no candidate is clear, the bot coils: full turn, brake on, boost off.
-- **Side:** the turn direction of the blocked candidate whose first contact comes latest. It is stored in `ai.coilTurn` (−1 or +1; 0 means not coiled), so the bot doesn't flip sides tick to tick.
-- **Each tick while coiled:** re-run the check. If any candidate is clear, clear `coilTurn` and use the best clear candidate. This happens on the first clear tick, well inside the spec's 1 s. While still blocked, keep coiling, even if the coil arc itself is blocked, because there is nothing better.
-- The coil needs no special mode. Turning at full rate and braked gives a radius of about 25 units, and only the train's own carriages are crossed.
+- When no candidate is clear, the bot coils: it uses the blocked candidate whose first contact comes latest, or, on a tie, the one farther from the obstacle at contact. The chosen input is one of those candidates.
+- In a tight spot that is usually the braked full turn. Its radius is about 25 units, and it crosses only the train's own carriages.
+- `ai.coilTurn` holds the turn side of that move (−1 or +1; 0 means not coiled).
+- **Each tick while coiled:** re-run the check. If any candidate is clear, clear `coilTurn` and use the best clear candidate. This happens on the first clear tick, well inside the spec's 1 s.
+- **Alternative rejected:** a fixed braked full turn, with the side held in `coilTurn`. In the benchmark it was where almost every skill-1 ram death happened. A braked circle stays in one place while a nearby train's new body sweeps over it. Per 20 seeds, the latest-contact fallback cut ram deaths from 51 to 10 at skill 1, and from 60 to 39 at the default.
 
 ### 6. Lapses
 

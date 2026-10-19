@@ -44,8 +44,8 @@
 
 ## 4. Coil and lapses
 
-- [x] 4.1 Add the coil (design decision 5). When no candidate is clear, use full turn toward the side whose blocked candidate makes contact latest, with the brake on and boost off. Hold the side in `ai.coilTurn`, re-check every tick, and leave on the first clear tick. Verify with `bot.test.ts` cases:
-  - **trapped:** a skill-1 bot inside a ring of another train's body about 120 units across has turn ±1 and brake on, and survives 5 s while the ring is held in place
+- [x] 4.1 Add the coil (design decision 5). When no candidate is clear, use the blocked candidate whose first contact is latest. Record its turn side in `ai.coilTurn`, re-check every tick, and leave on the first clear tick. Verify with `bot.test.ts` cases:
+  - **trapped:** a skill-1 bot inside a ring of another train's body about 120 units across starts with turn ±1 and the brake on, keeps circling inside the ring, and survives 5 s while the ring is held in place
   - **leaving:** after the ring train is removed, `coilTurn` returns to 0 and the bot resumes steering toward its target within 1 s
 - [x] 4.2 Add lapses (design decision 6). On the change from clear to blocked, when 0 < skill < 1, draw `rng.next() < lapseChance`. On a lapse, set `lapseTimer` to `BOT_LAPSE_TIME` and keep the chosen input until it runs out. Verify with `bot.test.ts` cases that drive 1,000 fresh clear-to-blocked encounters with a fixed seed:
   - at skill 1, no lapse ever starts
@@ -55,8 +55,8 @@
 ## 5. Benchmark and tuning
 
 - [x] 5.1 Add `packages/shared/src/sim/botBench.test.ts`, with a long timeout (for example 120 s). It runs 10 bots for 5 minutes on each of seeds 1 to 5 at skill 0, at the default and at 1. Destroyed bots respawn 2 s later. It counts deaths by cause and prints a table. It asserts that default-skill ram deaths are at most half the skill-0 count. Verify that `npx vitest run packages/shared/src/sim/botBench.test.ts` passes, and record the printed numbers in the commit message.
-- [ ] 5.2 Tune the constants from 2.1 until the benchmark passes, and until ram deaths at skill 1 are close to zero. Change only `constants.ts` values. Verify that the 5.1 benchmark passes and every test from groups 3 and 4 still passes.
-- [ ] 5.3 Run the full suite with `npm test`. For each fixed-seed test that now fails because bots avoid bodies:
+- [x] 5.2 Tune the constants from 2.1 until the benchmark passes, and until ram deaths at skill 1 are close to zero. Change only `constants.ts` values. Verify that the 5.1 benchmark passes and every test from groups 3 and 4 still passes.
+- [x] 5.3 Run the full suite with `npm test`. For each fixed-seed test that now fails because bots avoid bodies:
   - if it pins bot behaviour, set `botSkill: 0`
   - if its expectation about other behaviour really changed, update the expected value
 

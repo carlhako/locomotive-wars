@@ -77,7 +77,7 @@ export interface BotState {
   /** Position being steered at in seek and wander modes. */
   targetX: number;
   targetY: number;
-  /** Side a coiling bot turns to (−1 or +1); 0 when not coiled. */
+  /** Turn side (−1 or +1) of the move a coiling bot fell back to; 0 when a path is clear. */
   coilTurn: number;
   /** Seconds left of a lapse, during which the bot keeps its chosen input despite danger. */
   lapseTimer: number;

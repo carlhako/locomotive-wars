@@ -37,11 +37,11 @@ At skill above 0, each tick a bot SHALL predict a short path for the input its m
 - **THEN** the default-skill runs have at most half as many deaths by ramming a body as the skill-0 runs
 
 ### Requirement: Bot coil fallback
-At skill above 0, when every alternative path is blocked, a bot SHALL turn at full rate and brake, circling tightly so that it crosses only its own carriages. It SHALL keep circling until a path out is clear, then leave along that path.
+At skill above 0, when every alternative path is blocked, a bot SHALL use the alternative that reaches danger last. In a tight space this circles tightly, with a hard and usually braked turn, so that it crosses only its own carriages. It SHALL keep doing so until a path out is clear, then leave along that path.
 
 #### Scenario: Trapped bot coils
 - **WHEN** a bot at skill 1 is enclosed by another train's body in a ring about 120 units across
-- **THEN** it circles with full turn and the brake on, and is not destroyed while the ring stays closed
+- **THEN** it circles inside the ring, starting with full turn and the brake on, and is not destroyed while the ring stays closed
 
 #### Scenario: Leaving the coil
 - **WHEN** a coiled bot's enclosing body moves away so that a path out becomes clear

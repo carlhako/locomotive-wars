@@ -358,22 +358,22 @@ describe('bot coil', () => {
   it('coils inside a ring of another body and survives', () => {
     const { world, bot } = ringScene(1, 66);
     world.step();
+    // At the centre every way out is blocked: it falls back to a braked full turn.
     expect(bot.ai.coilTurn).not.toBe(0);
+    expect(Math.abs(bot.input.turn)).toBe(1);
+    expect(bot.input.brake).toBe(true);
     let coiled = 1;
     for (let i = 0; i < 150; i++) {
       world.step();
       expect(bot.alive).toBe(true);
-      // Between coils it may take a clear braked arc, so it always circles tightly.
-      expect(bot.input.brake).toBe(true);
+      // Coiled or on a clear arc, it keeps circling tightly inside the ring.
       expect(Math.abs(bot.input.turn)).toBeGreaterThanOrEqual(0.5);
+      expect(Math.hypot(bot.x - 3000, bot.y - 3000)).toBeLessThan(66 - 14);
       if (bot.ai.coilTurn !== 0) {
         coiled += 1;
-        expect(Math.abs(bot.ai.coilTurn)).toBe(1);
-        expect(bot.input.turn).toBe(bot.ai.coilTurn);
-        expect(bot.input.boost).toBe(false);
+        expect(Math.sign(bot.input.turn)).toBe(bot.ai.coilTurn);
       }
     }
-    // It starts coiled: at the centre every way out is blocked.
     expect(coiled).toBeGreaterThan(30);
   });
 
