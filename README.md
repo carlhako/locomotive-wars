@@ -95,6 +95,28 @@ next to it as `highscores.json.bak-<timestamp>`. A source that is not a high sco
 before anything is stopped. The table keeps `highscores.size` entries, so lower scores beyond that
 are dropped when the server starts.
 
+### Switch over a server you started by hand
+
+If you run a release by hand (extracted the package and ran `npm start`), the installer can take it
+over on the same machine and bring its high scores along:
+
+1. Find the folder you extracted the release into. Its high scores are in `data/highscores.json`
+   there, unless its `config.json` sets `highscores.file` to somewhere else. If you changed any
+   settings in that `config.json`, note them down.
+2. Stop the old server (Ctrl-C in its terminal, or `pkill -f packages/server/dist/main.js`). The
+   installer refuses to go on while something else is using the port. Scores are saved at the end
+   of each round, so stop it between rounds to keep the one in progress.
+3. Run the installer, pointing it at the old table:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/carlhako/locomotive-wars/main/deploy/install.sh | LW_IMPORT_HIGHSCORES=/root/locomotive-wars-0.2.0/data/highscores.json bash
+   ```
+
+4. Copy any settings you noted into `/etc/locomotive-wars/config.json` (leave its
+   `highscores.file` as it is) and run `systemctl restart locomotive-wars`.
+5. Remove whatever started the old server on boot, if anything (a crontab `@reboot` line,
+   `rc.local`, a script). Once you are happy, delete the old folder.
+
 ### Options
 
 Set these in front of `bash` in the commands above, for example `... | RELEASE_TAG=v0.2.0 bash`.

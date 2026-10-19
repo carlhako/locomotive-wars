@@ -298,8 +298,21 @@ merge_highscores() {
 }
 
 # --- swap and start ------------------------------------------------------------
+port() {
+  local p
+  p="$(sed -n 's/^PORT=//p' "$CONF_DIR/env" 2>/dev/null | tail -n1 | tr -d "\"' ")"
+  [ -n "$p" ] || p="$("$node_bin/node" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).port ?? 8080)' "$CONFIG")"
+  echo "$p"
+}
+
 running=0
 systemctl is-active --quiet "$SERVICE" && running=1
+
+# Something else on the port (such as a Locomotive Wars started by hand) would keep the service
+# from listening, and could answer the health check in its place.
+if [ "$running" -eq 0 ] && (exec 3<>"/dev/tcp/127.0.0.1/$(port)") 2>/dev/null; then
+  die "port $(port) is already in use by another program; stop it (an older server started by hand?) and run this again"
+fi
 
 if [ "$app_changed$node_changed$unit_changed" = "000" ] && [ -z "$import_src" ] && [ "$running" -eq 1 ]; then
   systemctl enable --quiet "$SERVICE"
@@ -329,13 +342,6 @@ systemctl enable --quiet "$SERVICE"
 if [ -n "$import_src" ]; then
   merge_highscores || warn "high score import failed; the table was left as it was"
 fi
-
-port() {
-  local p
-  p="$(sed -n 's/^PORT=//p' "$CONF_DIR/env" 2>/dev/null | tail -n1 | tr -d "\"' ")"
-  [ -n "$p" ] || p="$("$node_bin/node" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).port ?? 8080)' "$CONFIG")"
-  echo "$p"
-}
 
 # The new server must answer /healthz (with this version, once the server reports one).
 wait_healthy() {
