@@ -133,6 +133,8 @@ describe('rate limits', () => {
   it.each([
     ['zap', 70],
     ['mine', 90],
+    ['slowHeal', 60],
+    ['fullHeal', 60],
   ] as const)('plays %s at most once per %d ms', (name, gap) => {
     vi.useFakeTimers();
     const fx = unlocked();
@@ -172,6 +174,8 @@ describe('rate limits', () => {
     fx.zap();
     fx.mine();
     fx.shoot('flak');
+    fx.slowHeal();
+    fx.fullHeal();
     expect(FakeAudioContext.started).toBe(0);
   });
 });

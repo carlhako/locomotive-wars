@@ -8,6 +8,7 @@ import { drawBridge } from './bridge.ts';
 import type { BridgeAnimator } from './bridge.ts';
 import type { DrawEnv } from './canvas.ts';
 import { drawEnemies } from './enemies.ts';
+import { drawHearts } from './hearts.ts';
 import { drawMines } from './mines.ts';
 import { drawDrops, drawTrailers } from './pickups.ts';
 import { drawProjectiles } from './projectiles.ts';
@@ -28,8 +29,8 @@ export interface SceneFx {
 
 /** Input-driven overlays: they depend on the player's controls, not the world. */
 export interface SceneOverlay {
-  /** World-space aim angle for the local turrets, or null to point along the track. */
-  aim: number | null;
+  /** World-space aim point for the local turrets, or null to point along the track. */
+  aim: { x: number; y: number } | null;
   /** Mouse position in CSS pixels, or null when unknown. */
   mouse: { x: number; y: number } | null;
   boosting: boolean;
@@ -57,6 +58,7 @@ export function renderScene(
 
   drawTrailers(env, view.trailers);
   drawDrops(env, view.drops);
+  drawHearts(env, view.hearts);
   drawMines(env, view.mines, view.localId);
   drawEnemies(env, view.enemies, (id) => fx.hitFlash.isFlashing(id), view.time);
 

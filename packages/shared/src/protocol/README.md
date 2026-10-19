@@ -10,7 +10,7 @@ numbers to keep snapshots small. Binary encoding and delta compression are a lat
 
 ## Versioning
 
-`PROTOCOL_VERSION` (currently `6`) is bumped on any incompatible change to a message. The first
+`PROTOCOL_VERSION` (currently `7`) is bumped on any incompatible change to a message. The first
 message a client sends is `hello` carrying its version; a server that does not speak it replies
 `reject` with reason `version` and closes the socket. The client then tells the player to reload.
 
@@ -35,12 +35,12 @@ above are the defaults, and `welcome` carries the ones in force. The rest are co
 
 ## Client to server
 
-| `t`      | Fields                                                                              | Notes                                                                                                                       |
-| -------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `hello`  | `v` protocol version, `name`                                                        | Must be first. The server sanitises the name (`sanitizeName`) and spawns the train.                                         |
-| `in`     | `s` sequence, `tr` turn, `b` boost 0/1, `br` brake 0/1, `f` fire 0/1, `a` aim (rad) | Sent on change and every 100 ms. `tr` is clamped to [-1, 1]; non-finite numbers are malformed. Weapons fire while `f` is 1. |
-| `ping`   | `c` client time (ms)                                                                | Echoed in `pong`.                                                                                                           |
-| `hsName` | `token`, `name`                                                                     | Names the player's own high score entry. The token comes from `hsEligible`; there is no score field.                        |
+| `t`      | Fields                                                                                                           | Notes                                                                                                                                                                                         |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hello`  | `v` protocol version, `name`                                                                                     | Must be first. The server sanitises the name (`sanitizeName`) and spawns the train.                                                                                                           |
+| `in`     | `s` sequence, `tr` turn, `b` boost 0/1, `br` brake 0/1, `f` fire 0/1, `ax` `ay` aim offset from the head (units) | Sent on change and every 100 ms. `tr` is clamped to [-1, 1] and the aim offset to length 2000; non-finite numbers are malformed. Weapons fire while `f` is 1, each carriage at the aim point. |
+| `ping`   | `c` client time (ms)                                                                                             | Echoed in `pong`.                                                                                                                                                                             |
+| `hsName` | `token`, `name`                                                                                                  | Names the player's own high score entry. The token comes from `hsEligible`; there is no score field.                                                                                          |
 
 A client never sends a position. Unknown fields are dropped when a message is decoded.
 
@@ -65,21 +65,22 @@ A client never sends a position. Unknown fields are dropped when a message is de
 
 ### `snap`
 
-| Key   | Content                                                                                                                                                                                                                              |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `k`   | Simulation tick                                                                                                                                                                                                                      |
-| `st`  | Server time of the tick in ms (`k × 1000 / 30`); the clock `pong.st` also uses                                                                                                                                                       |
-| `ack` | Sequence number of the last `in` applied to the session's train                                                                                                                                                                      |
-| `me`  | The session's own train in full: `x y a hp mh f fm fl sq rb cs dn` (position, heading, hull, max hull, fuel, max fuel, flags, spawn counter, round best, carriage x/y pairs, drone angles). `null` while waiting out an intermission |
-| `tr`  | Other trains in view: `[id, x, y, angle, hp, maxHp, flags, spawnSeq, ...carriage x/y pairs]`                                                                                                                                         |
-| `en`  | Enemies: `[id, kind, x, y, angle, hp, maxHp, bossName?]`                                                                                                                                                                             |
-| `tl`  | Trailers: `[id, kind, x, y]`                                                                                                                                                                                                         |
-| `dr`  | Dropped pickups: `[id, kind, x, y, age]`                                                                                                                                                                                             |
-| `pr`  | Projectiles: `[id, kind, x, y, vx, vy]`                                                                                                                                                                                              |
-| `mn`  | Mines: `[id, ownerId, x, y, armed]` (`armed` is 0 or 1). Mines never move, so they are drawn where they are                                                                                                                          |
-| `ev`  | Simulation events since the previous snapshot (see below)                                                                                                                                                                            |
+| Key   | Content                                                                                                                                                                                                                                                       |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `k`   | Simulation tick                                                                                                                                                                                                                                               |
+| `st`  | Server time of the tick in ms (`k × 1000 / 30`); the clock `pong.st` also uses                                                                                                                                                                                |
+| `ack` | Sequence number of the last `in` applied to the session's train                                                                                                                                                                                               |
+| `me`  | The session's own train in full: `x y a hp mh f fm fl sq rb cs dn hd` (position, heading, hull, max hull, fuel, max fuel, flags, spawn counter, round best, carriage x/y pairs, drone angles, active healing doses). `null` while waiting out an intermission |
+| `tr`  | Other trains in view: `[id, x, y, angle, hp, maxHp, flags, spawnSeq, ...carriage x/y pairs]`                                                                                                                                                                  |
+| `en`  | Enemies: `[id, kind, x, y, angle, hp, maxHp, bossName?]`                                                                                                                                                                                                      |
+| `tl`  | Trailers: `[id, kind, x, y]`                                                                                                                                                                                                                                  |
+| `dr`  | Dropped pickups: `[id, kind, x, y, age]`                                                                                                                                                                                                                      |
+| `pr`  | Projectiles: `[id, kind, x, y, vx, vy, own?]` (`own` is 1 on the session's own train's shots)                                                                                                                                                                 |
+| `mn`  | Mines: `[id, ownerId, x, y, armed]` (`armed` is 0 or 1). Mines never move, so they are drawn where they are                                                                                                                                                   |
+| `ht`  | Hearts: `[id, kind, x, y]` (`kind` 0 slow, 1 full)                                                                                                                                                                                                            |
+| `ev`  | Simulation events since the previous snapshot (see below)                                                                                                                                                                                                     |
 
-- Kinds are indexes into `ENEMY_KINDS`, `PICKUP_KINDS`, and `PROJECTILE_KINDS`.
+- Kinds are indexes into `ENEMY_KINDS`, `PICKUP_KINDS`, `PROJECTILE_KINDS`, and `HEART_KINDS`.
 - Flags are a bitmask: `TRAIN_FLAG_BRIDGE` (1), `TRAIN_FLAG_BOOST` (2), `TRAIN_FLAG_DEAD` (4),
   `TRAIN_FLAG_PROTECTED` (8, spawn protection is active).
 - `spawnSeq` / `sq` counts the train's respawns. When it differs between two snapshots the client
@@ -115,6 +116,9 @@ This is also why the overview carries names: a train that was never in view stil
    with the server's own turn and speed rules and the player's current controls. When the next
    snapshot disagrees, the difference fades out over 100 ms. There is no full client-side prediction
    or reconciliation yet.
+4. **Own projectiles** (marked `own`) are drawn from the newest snapshot, moved along their
+   velocity by the time since it (capped like the local train), so they leave from the guns as
+   drawn rather than 133 ms behind them.
 
 ## Bandwidth
 

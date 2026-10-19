@@ -50,6 +50,23 @@ describe('viewFromWorld', () => {
     expect(view.enemies[0]).toMatchObject({ kind: 'hunter', x: 2000, y: 2100 });
   });
 
+  it("maps hearts of both kinds and the local train's doses", () => {
+    const world = emptyWorld();
+    const me = world.addTrain({ protectedFor: 0 });
+    const other = world.addTrain({ protectedFor: 0 });
+    const slow = world.spawnHeart('slow', 100, 200);
+    const full = world.spawnHeart('full', 300, 400, true);
+    me.healDoses = [3, 6];
+    other.healDoses = [1, 2, 3, 4];
+    const view = viewFromWorld(world, me.id);
+    expect(view.hearts).toEqual([
+      { id: slow.id, kind: 'slow', x: 100, y: 200 },
+      { id: full.id, kind: 'full', x: 300, y: 400 },
+    ]);
+    expect(view.localDoses).toBe(2);
+    expect(viewFromWorld(world, 9999).localDoses).toBe(0);
+  });
+
   it('reports hull and fuel for the HUD', () => {
     const world = emptyWorld();
     const t = world.addTrain({ protectedFor: 0, carriages: ['armor', 'fuel'] });

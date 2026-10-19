@@ -1,5 +1,6 @@
 import {
   ENEMY_KINDS,
+  HEART_KINDS,
   MINE_ARM_TIME,
   PICKUP_KINDS,
   PROJECTILE_KINDS,
@@ -15,6 +16,7 @@ import type {
   LeaderRow,
   OverviewMsg,
   OwnTrain,
+  ProjectileRow,
   SimEvent,
   SnapshotMsg,
   TrainRow,
@@ -57,6 +59,7 @@ export function ownTrainOf(t: TrainState): OwnTrain {
     rb: t.roundBest,
     cs: carriageCoords(t),
     dn: t.drones.map((d) => ang(d.angle)),
+    hd: t.healDoses.length,
   };
 }
 
@@ -130,20 +133,31 @@ export function buildSnapshot(input: SnapshotInput): SnapshotMsg {
       round(p.y),
       r1(p.age),
     ]),
-    pr: visible.projectiles.map((p) => [
-      p.id,
-      PROJECTILE_KINDS.indexOf(p.kind),
-      round(p.x),
-      round(p.y),
-      round(p.vx),
-      round(p.vy),
-    ]),
+    pr: visible.projectiles.map((p) => {
+      const row: ProjectileRow = [
+        p.id,
+        PROJECTILE_KINDS.indexOf(p.kind),
+        round(p.x),
+        round(p.y),
+        round(p.vx),
+        round(p.vy),
+      ];
+      // Marks the session's own train's shots, which the client draws in the present.
+      if (input.own && p.ownerKind === 'train' && p.ownerId === input.own.id) row.push(1);
+      return row;
+    }),
     mn: visible.mines.map((m) => [
       m.id,
       m.ownerId,
       round(m.x),
       round(m.y),
       m.age >= MINE_ARM_TIME ? 1 : 0,
+    ]),
+    ht: visible.hearts.map((h) => [
+      h.id,
+      HEART_KINDS.indexOf(h.kind) as 0 | 1,
+      round(h.x),
+      round(h.y),
     ]),
     ev: input.events.map(roundEvent),
   };

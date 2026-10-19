@@ -2,13 +2,14 @@ import type {
   CarriageKind,
   Controller,
   EnemyKind,
+  HeartKind,
   PickupKind,
   ProjectileKind,
   SimEvent,
 } from '../sim/types.ts';
 
 /** Bumped on any incompatible change to the message shapes. */
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 /**
  * The wire protocol, JSON for the beta. Keys are short and entity lists are arrays of numbers to
@@ -51,6 +52,7 @@ export const PROJECTILE_KINDS = [
   'enemy',
   'flak',
 ] as const satisfies readonly ProjectileKind[];
+export const HEART_KINDS = ['slow', 'full'] as const satisfies readonly HeartKind[];
 
 // Compile-time check that the lists above are complete.
 type Missing<T, L extends readonly T[]> = Exclude<T, L[number]>;
@@ -58,7 +60,8 @@ const _complete: [
   Missing<PickupKind, typeof PICKUP_KINDS>,
   Missing<EnemyKind, typeof ENEMY_KINDS>,
   Missing<ProjectileKind, typeof PROJECTILE_KINDS>,
-] extends [never, never, never]
+  Missing<HeartKind, typeof HEART_KINDS>,
+] extends [never, never, never, never]
   ? true
   : never = true;
 void _complete;
@@ -90,8 +93,9 @@ export interface InputMsg {
   br: 0 | 1;
   /** Fire (weapon carriages fire while held). */
   f: 0 | 1;
-  /** World-space aim angle in radians. */
-  a: number;
+  /** Aim point minus the head position, in world units (the server caps its length). */
+  ax: number;
+  ay: number;
 }
 
 export interface PingMsg {
@@ -255,8 +259,10 @@ export type EnemyRow = [number, number, number, number, number, number, number, 
 export type TrailerRow = [number, number, number, number];
 /** `[id, kind index, x, y, age]`. */
 export type DropRow = [number, number, number, number, number];
-/** `[id, kind index, x, y, vx, vy]`. */
-export type ProjectileRow = [number, number, number, number, number, number];
+/** `[id, kind index, x, y, vx, vy, own?]`: `own` is 1 when the receiving session's train fired it. */
+export type ProjectileRow = [number, number, number, number, number, number, 1?];
+/** `[id, kind index (0 slow, 1 full), x, y]`. */
+export type HeartRow = [number, 0 | 1, number, number];
 /** `[id, ownerId, x, y, armed 0/1]`. Mines never move, so they are drawn where they are. */
 export type MineRow = [number, number, number, number, 0 | 1];
 
@@ -281,6 +287,8 @@ export interface OwnTrain {
   cs: number[];
   /** Drone orbit angles. */
   dn: number[];
+  /** Active healing doses. */
+  hd: number;
 }
 
 export interface SnapshotMsg {
@@ -298,6 +306,7 @@ export interface SnapshotMsg {
   dr: DropRow[];
   pr: ProjectileRow[];
   mn: MineRow[];
+  ht: HeartRow[];
   ev: SimEvent[];
 }
 
@@ -395,8 +404,16 @@ export function decodeClientMessage(raw: string): ClientMessage | null {
       }
       return null;
     case 'in':
-      if (isInt(m.s) && isNum(m.tr) && isFlag(m.b) && isFlag(m.br) && isFlag(m.f) && isNum(m.a)) {
-        return { t: 'in', s: m.s, tr: m.tr, b: m.b, br: m.br, f: m.f, a: m.a };
+      if (
+        isInt(m.s) &&
+        isNum(m.tr) &&
+        isFlag(m.b) &&
+        isFlag(m.br) &&
+        isFlag(m.f) &&
+        isNum(m.ax) &&
+        isNum(m.ay)
+      ) {
+        return { t: 'in', s: m.s, tr: m.tr, b: m.b, br: m.br, f: m.f, ax: m.ax, ay: m.ay };
       }
       return null;
     case 'ping':
@@ -432,6 +449,7 @@ function isOwnTrain(v: unknown): v is OwnTrain {
   const nums = [v.x, v.y, v.a, v.hp, v.mh, v.f, v.fm, v.fl, v.sq, v.rb];
   return (
     nums.every(isNum) &&
+    isInt(v.hd) &&
     Array.isArray(v.cs) &&
     v.cs.length % 2 === 0 &&
     v.cs.every(isNum) &&
@@ -530,8 +548,11 @@ export function decodeServerMessage(raw: string): ServerMessage | null {
         numRows(m.tl, 4) &&
         numRows(m.dr, 5) &&
         numRows(m.pr, 6) &&
+        (m.pr as unknown[][]).every((r) => r.length === 6 || (r.length === 7 && r[6] === 1)) &&
         numRows(m.mn, 5) &&
         (m.mn as unknown[][]).every((r) => isFlag(r[4])) &&
+        numRows(m.ht, 4) &&
+        (m.ht as unknown[][]).every((r) => isFlag(r[1])) &&
         Array.isArray(m.ev) &&
         m.ev.every((e) => isObject(e) && typeof e.type === 'string')
       ) {

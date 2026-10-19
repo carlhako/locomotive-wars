@@ -43,7 +43,9 @@ interface Slot {
   turn: number;
   boost: boolean;
   fire: boolean;
-  aim: number;
+  /** Aim offset from the head, in world units. */
+  ax: number;
+  ay: number;
   seq: number;
 }
 
@@ -120,7 +122,8 @@ async function main(): Promise<boolean> {
     turn: 0,
     boost: false,
     fire: false,
-    aim: 0,
+    ax: 200,
+    ay: 0,
     seq: 0,
   }));
 
@@ -149,7 +152,12 @@ async function main(): Promise<boolean> {
       if (Math.random() < 0.15) slot.turn = [-1, 0, 1][Math.floor(Math.random() * 3)] as number;
       if (Math.random() < 0.05) slot.boost = !slot.boost;
       if (Math.random() < 0.1) slot.fire = !slot.fire;
-      slot.aim = Math.random() < 0.3 ? (Math.random() - 0.5) * 2 * Math.PI : slot.aim;
+      if (Math.random() < 0.3) {
+        const angle = (Math.random() - 0.5) * 2 * Math.PI;
+        const len = 50 + Math.random() * 450;
+        slot.ax = Math.round(Math.cos(angle) * len * 10) / 10;
+        slot.ay = Math.round(Math.sin(angle) * len * 10) / 10;
+      }
       slot.seq += 1;
       ws.send(
         encodeMessage({
@@ -159,7 +167,8 @@ async function main(): Promise<boolean> {
           b: slot.boost ? 1 : 0,
           br: 0,
           f: slot.fire ? 1 : 0,
-          a: slot.aim,
+          ax: slot.ax,
+          ay: slot.ay,
         }),
       );
     }

@@ -21,7 +21,7 @@ import {
   TESLA_RANGE,
   WEAPONS,
 } from '@lw/shared';
-import type { CarriageKind, PickupKind } from '@lw/shared';
+import type { CarriageKind, HeartKind, PickupKind } from '@lw/shared';
 
 /** Legend groups, in the order the legend shows them. `auto` weapons fire without the button. */
 export type CarriageCategory = 'weapon' | 'auto' | 'defence' | 'support';
@@ -196,3 +196,12 @@ export function isWeaponCarriage(kind: CarriageKind): boolean {
 
 /** The local player's colour in the HUD and minimap. */
 export const LOCAL_COLOR = '#4a9eff';
+
+/** Hearts on the map: slow ones pink, full ones red. */
+export const HEART_COLORS: Record<HeartKind, string> = {
+  slow: '#ff7ab8',
+  full: '#ff2448',
+};
+
+/** Healing: the "+N" heal number and the full-heal screen flash. */
+export const HEAL_COLOR = '#44ff77';

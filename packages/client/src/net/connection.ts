@@ -5,11 +5,13 @@ import {
   PING_INTERVAL_MS,
   PROTOCOL_VERSION,
   SNAPSHOT_TIMEOUT_MS,
+  wrapPos,
 } from '@lw/shared';
 import type {
   HighScoresMsg,
   LeaderRow,
   OverviewRow,
+  ProjectileView,
   RejectReason,
   RoundEndMsg,
   RoundMsg,
@@ -32,7 +34,8 @@ import type {
 } from '../source.ts';
 import { SnapshotBuffer } from './buffer.ts';
 import { ClockSync } from './clock.ts';
-import { LocalTrain } from './localTrain.ts';
+import { LocalTrain, MAX_EXTRAPOLATION_MS } from './localTrain.ts';
+import { ownProjectilesOf } from './view.ts';
 import { connectWebSocket } from './transport.ts';
 import type { Connect, Transport } from './transport.ts';
 
@@ -118,8 +121,17 @@ export class NetSession implements GameSource {
   private kickAt: number | null = null;
   private pendingEvents: SimEvent[] = [];
   private lastSnapshotAt = 0;
+  /** The own train's projectiles in the newest snapshot, drawn run forward to the present. */
+  private ownShots: { st: number; shots: ProjectileView[] } | null = null;
 
-  private input: TrainInput = { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
+  private input: TrainInput = {
+    turn: 0,
+    boost: false,
+    brake: false,
+    fire: false,
+    aimX: 0,
+    aimY: 0,
+  };
   private sent: TrainInput | null = null;
   private sentAt = -Infinity;
   private seq = 0;
@@ -269,6 +281,7 @@ export class NetSession implements GameSource {
     this.meta = new Map();
     this.overview = [];
     this.pendingEvents = [];
+    this.ownShots = null;
     this.sent = null;
     this.sentAt = -Infinity;
     this.pingSentAt.clear();
@@ -451,6 +464,9 @@ export class NetSession implements GameSource {
     this.version += 1;
 
     this.buffer.push(snap, this.welcome.id, this.meta);
+    if (!this.ownShots || snap.st > this.ownShots.st) {
+      this.ownShots = { st: snap.st, shots: ownProjectilesOf(snap) };
+    }
     if (snap.me) {
       const speedCarriages =
         this.meta.get(this.welcome.id)?.kinds.filter((k) => k === 'speed').length ?? 0;
@@ -498,7 +514,9 @@ export class NetSession implements GameSource {
       prev.boost !== cur.boost ||
       prev.brake !== cur.brake ||
       prev.fire !== cur.fire;
-    const aimChanged = !prev || Math.abs(prev.aim - cur.aim) > 0.001;
+    // The offset goes out rounded to 0.1 units; anything finer is not a change.
+    const aimChanged =
+      !prev || Math.abs(prev.aimX - cur.aimX) >= 0.05 || Math.abs(prev.aimY - cur.aimY) >= 0.05;
     const heartbeat = gap >= INPUT_HEARTBEAT_MS * 0.75;
     const due =
       (controlsChanged && gap >= MIN_CONTROL_GAP_MS) ||
@@ -516,7 +534,8 @@ export class NetSession implements GameSource {
         b: cur.boost ? 1 : 0,
         br: cur.brake ? 1 : 0,
         f: cur.fire ? 1 : 0,
-        a: Math.round(cur.aim * 1000) / 1000,
+        ax: Math.round(cur.aimX * 10) / 10,
+        ay: Math.round(cur.aimY * 10) / 10,
       }),
     );
   }
@@ -543,7 +562,27 @@ export class NetSession implements GameSource {
       }));
       return { ...t, x: pose.x, y: pose.y, angle: pose.angle, carriages, drones: pose.drones };
     });
-    return { ...base, trains, minimap: this.minimap(trains, pose) };
+    const projectiles = [...base.projectiles, ...this.ownProjectiles(serverNow, frozen)];
+    return { ...base, trains, projectiles, minimap: this.minimap(trains, pose) };
+  }
+
+  /**
+   * The own train's projectiles where they are now: the newest snapshot's, moved along their
+   * velocity by the time since it (capped like the local train). They fly straight, so this is
+   * exact until one hits something, and then it is missing from the next snapshot.
+   */
+  private ownProjectiles(serverNow: number, frozen: boolean): ProjectileView[] {
+    const own = this.ownShots;
+    if (!own) return [];
+    const elapsed = frozen
+      ? 0
+      : Math.min(Math.max(serverNow - own.st, 0), MAX_EXTRAPOLATION_MS) / 1000;
+    const size = this.mapSize;
+    return own.shots.map((p) => ({
+      ...p,
+      x: wrapPos(p.x + p.vx * elapsed, size),
+      y: wrapPos(p.y + p.vy * elapsed, size),
+    }));
   }
 
   /** One dot per living train from the 2 Hz overview, with trains in view placed exactly. */
@@ -577,6 +616,8 @@ function emptyView(localId: number): WorldView {
     drops: [],
     projectiles: [],
     mines: [],
+    hearts: [],
+    localDoses: 0,
     minimap: [],
   };
 }

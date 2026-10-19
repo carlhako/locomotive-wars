@@ -16,18 +16,19 @@ export interface DamageNumber {
 export const MAX_DAMAGE_NUMBERS = 60;
 
 export interface DamageNumberSink {
-  add(x: number, y: number, amount: number, color?: string): void;
+  /** `prefix` goes before the number, such as "+" for healing. */
+  add(x: number, y: number, amount: number, color?: string, prefix?: string): void;
 }
 
 /** Floating damage numbers that rise, slow, and fade (reference lines 1046-1053, 1462-1468). */
 export class DamageNumbers implements DamageNumberSink {
   readonly numbers: DamageNumber[] = [];
 
-  add(x: number, y: number, amount: number, color = '#ffeb3b'): void {
+  add(x: number, y: number, amount: number, color = '#ffeb3b', prefix = ''): void {
     this.numbers.push({
       x,
       y,
-      text: Math.max(1, Math.round(amount)).toString(),
+      text: prefix + Math.max(1, Math.round(amount)).toString(),
       color,
       age: 0,
       life: 1.0,

@@ -31,7 +31,8 @@ function makeScenario(seed: number) {
         boost: tick % 90 < 40,
         brake: tick % 150 > 140,
         fire: (tick + i * 20) % 60 < 40,
-        aim: (tick / 30) * (i + 1),
+        aimX: Math.cos((tick / 30) * (i + 1)) * 250,
+        aimY: Math.sin((tick / 30) * (i + 1)) * 250,
       });
     });
   };

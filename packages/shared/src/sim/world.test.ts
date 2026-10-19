@@ -242,4 +242,25 @@ describe('population', () => {
     run(world, 15);
     expect(train.angle).toBeCloseTo(mid * 2, 6);
   });
+
+  it('keeps the aim point a fixed offset from the head as the train moves', () => {
+    const world = emptyWorld();
+    const train = world.addTrain({ protectedFor: 0, x: 3000, y: 3000, angle: -Math.PI / 2 });
+    world.setInput(train.id, { aimX: 200, aimY: 0, fire: true });
+    const events = run(world, 30);
+    expect(train.y).toBeLessThan(2850);
+    expect(train.input).toMatchObject({ aimX: 200, aimY: 0 });
+    // The last shot of the second still heads for 200 units east of where the head now is.
+    const last = ofType(events, 'fired').at(-1)!;
+    const cross =
+      Math.cos(last.angle) * (train.y - last.y) - Math.sin(last.angle) * (train.x + 200 - last.x);
+    expect(Math.abs(cross)).toBeLessThan(1e-6);
+  });
+
+  it('aims a new train 200 units ahead along its heading', () => {
+    const world = emptyWorld();
+    const train = world.addTrain({ angle: Math.PI / 2 });
+    expect(train.input.aimX).toBeCloseTo(0);
+    expect(train.input.aimY).toBeCloseTo(200);
+  });
 });

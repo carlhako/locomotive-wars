@@ -1,6 +1,7 @@
 import {
   DRONE_ORBIT_SPEED,
   ENEMY_KINDS,
+  HEART_KINDS,
   PICKUP_KINDS,
   PROJECTILE_KINDS,
   TRAIN_FLAG_BOOST,
@@ -14,6 +15,7 @@ import type {
   CarriageKind,
   CarriageView,
   OwnTrain,
+  ProjectileView,
   SnapshotMsg,
   TrainMeta,
   TrainView,
@@ -115,8 +117,26 @@ export function ownTrainView(
   };
 }
 
+/** A snapshot's projectile row as a view. */
+function projectileOf(r: SnapshotMsg['pr'][number]): ProjectileView {
+  return {
+    id: r[0],
+    kind: PROJECTILE_KINDS[r[1]] ?? 'bullet',
+    x: r[2],
+    y: r[3],
+    vx: r[4],
+    vy: r[5],
+  };
+}
+
+/** The session's own train's projectiles in a snapshot (rows flagged own). */
+export function ownProjectilesOf(snap: SnapshotMsg): ProjectileView[] {
+  return snap.pr.filter((r) => r[6] === 1).map(projectileOf);
+}
+
 /**
- * Builds the world view a snapshot describes. Other trains' drone angles are placeholders until
+ * Builds the world view a snapshot describes. The session's own projectiles are left out: they
+ * are drawn from the newest snapshot instead (see `ownProjectilesOf`), not in the past. Other trains' drone angles are placeholders until
  * sampling time, when they are derived from the render clock so they spin smoothly. The minimap
  * is left empty: the overview supplies it.
  */
@@ -184,15 +204,10 @@ export function viewFromSnapshot(
       y: r[3],
       age: r[4],
     })),
-    projectiles: snap.pr.map((r) => ({
-      id: r[0],
-      kind: PROJECTILE_KINDS[r[1]] ?? 'bullet',
-      x: r[2],
-      y: r[3],
-      vx: r[4],
-      vy: r[5],
-    })),
+    projectiles: snap.pr.filter((r) => r[6] !== 1).map(projectileOf),
     mines: snap.mn.map((r) => ({ id: r[0], ownerId: r[1], x: r[2], y: r[3], armed: r[4] === 1 })),
+    hearts: snap.ht.map((r) => ({ id: r[0], kind: HEART_KINDS[r[1]] ?? 'slow', x: r[2], y: r[3] })),
+    localDoses: snap.me?.hd ?? 0,
     minimap: [],
   };
 }

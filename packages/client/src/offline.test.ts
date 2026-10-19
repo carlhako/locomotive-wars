@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { TrainInput } from '@lw/shared';
 import { OFFLINE_BOTS, OfflineSession } from './offline.ts';
 
-const IDLE: TrainInput = { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
+const IDLE: TrainInput = {
+  turn: 0,
+  boost: false,
+  brake: false,
+  fire: false,
+  aimX: 200,
+  aimY: 0,
+};
 
 describe('OfflineSession', () => {
   it('starts a world with the player and six bots', () => {

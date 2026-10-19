@@ -79,6 +79,15 @@ describe('hudModel', () => {
     expect(hudModel(view)).toMatchObject({ length: 3, roundBest: 3 });
   });
 
+  it('shows the dose count while healing doses are active', () => {
+    const w = world();
+    const me = w.addTrain();
+    me.healDoses = [2, 5, 8];
+    expect(hudModel(viewFromWorld(w, me.id)).doses).toBe(3);
+    me.healDoses = [];
+    expect(hudModel(viewFromWorld(w, me.id)).doses).toBe(0);
+  });
+
   it('handles a view with no local train', () => {
     const w = world();
     w.addTrain();

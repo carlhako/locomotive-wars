@@ -8,6 +8,7 @@
   <body>
     <canvas id="game"></canvas>
     <div id="damage-flash"></div>
+    <div id="heal-flash"></div>
     <div id="ui">
       <div id="leaderboard" class="panel">
         <h2>
@@ -21,7 +22,12 @@
           <span class="key">Round best</span><span class="val" id="round-best">1</span>
         </div>
         <div class="row">
-          <span class="key">Hull</span><span class="val" id="hp-val">100%</span>
+          <span class="key"
+            >Hull
+            <span id="heal-doses" title="Healing doses active"
+              >♥ ×<span id="heal-doses-n">0</span></span
+            ></span
+          ><span class="val" id="hp-val">100%</span>
         </div>
         <div class="row">
           <div class="bar hp" style="width: 100%"><div id="hp" style="width: 100%"></div></div>

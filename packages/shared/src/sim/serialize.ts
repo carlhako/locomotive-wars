@@ -13,6 +13,7 @@ export function serializeWorld(world: World): string {
     rng: world.rng.state,
     nextId: s.nextId,
     trailerTimer: s.trailerTimer,
+    heartTimers: s.heartTimers,
     enemyTimer: s.enemyTimer,
     bossTimer: s.bossTimer,
     bossId: s.bossId,
@@ -22,5 +23,6 @@ export function serializeWorld(world: World): string {
     mines: s.mines,
     trailers: s.trailers,
     drops: s.drops,
+    hearts: s.hearts,
   });
 }

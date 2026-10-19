@@ -60,7 +60,10 @@ export class Banner implements BannerSink {
  */
 const FLASH_COOLDOWN = 0.4;
 
-/** The red vignette flashed when the local train is hit (reference lines 1011-1015). */
+/**
+ * A full-screen vignette flashed on an element: red when the local train is hit (reference lines
+ * 1011-1015), green when it collects a full heart.
+ */
 export class DamageFlash {
   private left = 0;
   private cooldown = 0;

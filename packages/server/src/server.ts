@@ -6,6 +6,7 @@ import {
   CLOSE_KICKED,
   decodeClientMessage,
   encodeMessage,
+  MAX_AIM_OFFSET,
   MAX_CLIENT_MESSAGE_BYTES,
   OVERVIEW_RATE,
   PROTOCOL_VERSION,
@@ -55,6 +56,14 @@ export interface GameServerOptions {
   highscoreStore?: HighScoreStore;
   /** Called once when a round ends, with its final standings. */
   onRoundEnd?: (result: RoundResult) => void;
+}
+
+/** An aim offset scaled down to `MAX_AIM_OFFSET` long at most, keeping its direction. */
+export function clampAim(ax: number, ay: number): { aimX: number; aimY: number } {
+  const len = Math.hypot(ax, ay);
+  if (len <= MAX_AIM_OFFSET) return { aimX: ax, aimY: ay };
+  const k = MAX_AIM_OFFSET / len;
+  return { aimX: ax * k, aimY: ay * k };
 }
 
 /** Seed for a round's world, so each round differs but a given server seed repeats. */
@@ -264,7 +273,7 @@ export class GameServer {
             boost: msg.b === 1,
             brake: msg.br === 1,
             fire: msg.f === 1,
-            aim: msg.a,
+            ...clampAim(msg.ax, msg.ay),
           },
         };
         return;
@@ -555,6 +564,7 @@ const EMPTY_VISIBLE: Visible = {
   drops: [],
   projectiles: [],
   mines: [],
+  hearts: [],
 };
 
 function canSend(ws: WebSocket): boolean {

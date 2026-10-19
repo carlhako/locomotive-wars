@@ -25,6 +25,7 @@ const snapshot: SnapshotMsg = {
     rb: 12,
     cs: [90, 200, 72, 200],
     dn: [0.5],
+    hd: 2,
   },
   tr: [[7, 10, 20, 3.14, 90, 100, 9, 2, 5, 6, 7, 8]],
   en: [
@@ -33,10 +34,17 @@ const snapshot: SnapshotMsg = {
   ],
   tl: [[9, 2, 50, 60]],
   dr: [[10, 4, 70, 80, 1.5]],
-  pr: [[11, 1, 90, 100, 200, -50]],
+  pr: [
+    [11, 1, 90, 100, 200, -50],
+    [14, 0, 95, 105, 550, 0, 1],
+  ],
   mn: [
     [12, 7, 110, 120, 1],
     [13, 9, 130, 140, 0],
+  ],
+  ht: [
+    [15, 0, 150, 160],
+    [16, 1, 170, 180],
   ],
   ev: [
     { type: 'trainDestroyed', victimId: 7, cause: 'ram', killerTrainId: 9, x: 5, y: 6 },
@@ -63,12 +71,13 @@ const snapshot: SnapshotMsg = {
       y: 20,
     },
     { type: 'mineExploded', mineId: 12, ownerId: 7, x: 110, y: 120 },
+    { type: 'heart', trainId: 7, heartId: 16, kind: 'full', amount: 250, x: 170, y: 180 },
   ],
 };
 
 const clientMessages: ClientMessage[] = [
   { t: 'hello', v: PROTOCOL_VERSION, name: 'Casey' },
-  { t: 'in', s: 5, tr: -1, b: 1, br: 0, f: 1, a: 2.5 },
+  { t: 'in', s: 5, tr: -1, b: 1, br: 0, f: 1, ax: -120.5, ay: 30 },
   { t: 'ping', c: 123456.5 },
   { t: 'hsName', token: '3f1c9a52-8d1e-4a6b-9a64-2b7d3e0c1f11', name: 'CARL' },
 ];
@@ -95,7 +104,7 @@ const serverMessages: ServerMessage[] = [
     gone: [2, 3],
   },
   snapshot,
-  { ...snapshot, me: null, tr: [], en: [], tl: [], dr: [], pr: [], mn: [], ev: [] },
+  { ...snapshot, me: null, tr: [], en: [], tl: [], dr: [], pr: [], mn: [], ht: [], ev: [] },
   {
     t: 'ov',
     h: [[4, 10, 20, '#fff', 'Casey']],
@@ -159,15 +168,26 @@ describe('decodeClientMessage', () => {
     ['hello with a fractional version', '{"t":"hello","v":1.5,"name":"a"}'],
     ['hello with a numeric name', '{"t":"hello","v":1,"name":7}'],
     ['hello with an enormous name', JSON.stringify({ t: 'hello', v: 1, name: 'x'.repeat(5000) })],
-    ['input missing a field', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0}'],
-    ['input missing fire', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"a":0}'],
-    ['input with fire 2', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":2,"a":0}'],
-    ['input with a string turn', '{"t":"in","s":1,"tr":"1","b":0,"br":0,"f":0,"a":0}'],
-    ['input with a boolean boost', '{"t":"in","s":1,"tr":0,"b":true,"br":0,"f":0,"a":0}'],
-    ['input with boost 2', '{"t":"in","s":1,"tr":0,"b":2,"br":0,"f":0,"a":0}'],
-    ['input with an infinite aim', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0,"a":1e999}'],
-    ['input with an infinite turn', '{"t":"in","s":1,"tr":-1e999,"b":0,"br":0,"f":0,"a":0}'],
-    ['input with a fractional sequence', '{"t":"in","s":1.5,"tr":0,"b":0,"br":0,"f":0,"a":0}'],
+    ['input missing a field', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0,"ax":0}'],
+    ['input with the old aim angle', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0,"a":0}'],
+    ['input with a string aim y', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0,"ax":0,"ay":"0"}'],
+    ['input missing fire', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"ax":0,"ay":0}'],
+    ['input with fire 2', '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":2,"ax":0,"ay":0}'],
+    ['input with a string turn', '{"t":"in","s":1,"tr":"1","b":0,"br":0,"f":0,"ax":0,"ay":0}'],
+    ['input with a boolean boost', '{"t":"in","s":1,"tr":0,"b":true,"br":0,"f":0,"ax":0,"ay":0}'],
+    ['input with boost 2', '{"t":"in","s":1,"tr":0,"b":2,"br":0,"f":0,"ax":0,"ay":0}'],
+    [
+      'input with an infinite aim x',
+      '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0,"ax":1e999,"ay":0}',
+    ],
+    [
+      'input with an infinite turn',
+      '{"t":"in","s":1,"tr":-1e999,"b":0,"br":0,"f":0,"ax":0,"ay":0}',
+    ],
+    [
+      'input with a fractional sequence',
+      '{"t":"in","s":1.5,"tr":0,"b":0,"br":0,"f":0,"ax":0,"ay":0}',
+    ],
     ['ping with a string time', '{"t":"ping","c":"now"}'],
     ['hsName without a token', '{"t":"hsName","name":"CARL"}'],
     ['hsName with an empty token', '{"t":"hsName","token":"","name":"CARL"}'],
@@ -187,13 +207,15 @@ describe('decodeClientMessage', () => {
   });
 
   it('passes an out-of-range turn through for the server to clamp', () => {
-    const msg = decodeClientMessage('{"t":"in","s":1,"tr":50,"b":0,"br":0,"f":0,"a":0}');
-    expect(msg).toEqual({ t: 'in', s: 1, tr: 50, b: 0, br: 0, f: 0, a: 0 });
+    const msg = decodeClientMessage('{"t":"in","s":1,"tr":50,"b":0,"br":0,"f":0,"ax":0,"ay":0}');
+    expect(msg).toEqual({ t: 'in', s: 1, tr: 50, b: 0, br: 0, f: 0, ax: 0, ay: 0 });
   });
 
   it('drops unknown extra fields, such as a client-claimed position', () => {
-    const msg = decodeClientMessage('{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0,"a":0,"x":5,"y":6}');
-    expect(msg).toEqual({ t: 'in', s: 1, tr: 0, b: 0, br: 0, f: 0, a: 0 });
+    const msg = decodeClientMessage(
+      '{"t":"in","s":1,"tr":0,"b":0,"br":0,"f":0,"ax":0,"ay":0,"x":5,"y":6}',
+    );
+    expect(msg).toEqual({ t: 'in', s: 1, tr: 0, b: 0, br: 0, f: 0, ax: 0, ay: 0 });
   });
 });
 
@@ -217,6 +239,17 @@ describe('decodeServerMessage', () => {
       JSON.stringify({ ...snapshot, tr: [[7, 10, 20, 3.14, 90, 100, 1]] }),
     ],
     ['a snapshot without mines', JSON.stringify({ ...snapshot, mn: undefined })],
+    ['a snapshot without hearts', JSON.stringify({ ...snapshot, ht: undefined })],
+    ['a snapshot with a short heart row', JSON.stringify({ ...snapshot, ht: [[1, 0, 3]] })],
+    ['a snapshot with an unknown heart kind', JSON.stringify({ ...snapshot, ht: [[1, 2, 3, 4]] })],
+    [
+      'a snapshot with a projectile own flag that is not 1',
+      JSON.stringify({ ...snapshot, pr: [[1, 0, 2, 3, 4, 5, 0]] }),
+    ],
+    [
+      'an own train without a dose count',
+      JSON.stringify({ ...snapshot, me: { ...snapshot.me, hd: undefined } }),
+    ],
     ['a snapshot with a short mine row', JSON.stringify({ ...snapshot, mn: [[1, 2, 3, 4]] })],
     [
       'a snapshot with a mine armed flag that is not 0 or 1',

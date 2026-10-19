@@ -19,6 +19,8 @@ export interface HudModel {
   roundBest: number;
   /** True while the local train is alive and crossing its own trail. */
   bridge: boolean;
+  /** Active healing doses on the local train; the heart indicator shows while above 0. */
+  doses: number;
   /** The living boss, if any. */
   boss: { name: string; pct: number } | null;
   /** The round clock while playing: `m:ss`, `urgent` in the final 10 seconds. */
@@ -62,6 +64,7 @@ export function hudModel(view: WorldView, round?: RoundStatus | null): HudModel 
       length: 0,
       roundBest: 0,
       bridge: false,
+      doses: 0,
       boss: bossInfo,
       timer,
     };
@@ -75,6 +78,7 @@ export function hudModel(view: WorldView, round?: RoundStatus | null): HudModel 
     // The server's figure can trail the live length by a snapshot.
     roundBest: Math.max(local.roundBest, length),
     bridge: local.alive && local.bridge,
+    doses: local.alive ? view.localDoses : 0,
     boss: bossInfo,
     timer,
   };
@@ -105,6 +109,8 @@ export class Hud {
   private readonly bossName = byId('boss-name');
   private readonly bossHp = byId('boss-hp');
   private readonly bridge = byId('bridge-indicator');
+  private readonly doses = byId('heal-doses');
+  private readonly dosesN = byId('heal-doses-n');
 
   update(view: WorldView, round?: RoundStatus | null, idleSeconds?: number | null): void {
     const m = hudModel(view, round);
@@ -122,6 +128,8 @@ export class Hud {
       this.fuelVal.textContent = `${Math.floor(m.fuelPct)}%`;
     }
     this.bridge.classList.toggle('show', m.bridge);
+    this.doses.classList.toggle('show', m.doses > 0);
+    if (m.doses > 0) this.dosesN.textContent = String(m.doses);
     if (m.boss) {
       this.bossHud.classList.add('show');
       this.bossHp.style.width = `${m.boss.pct}%`;

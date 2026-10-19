@@ -3,7 +3,7 @@ import { World } from './world.ts';
 
 /** Test helpers; not part of the package's public API and excluded from the build. */
 
-/** A world with no trailers, enemies, replenishment, or boss, for isolated scenarios. */
+/** A world with no trailers, enemies, world hearts, replenishment, or boss, for isolated scenarios. */
 export function emptyWorld(options: WorldOptions = {}): World {
   return new World({
     seed: 1,
@@ -12,6 +12,8 @@ export function emptyWorld(options: WorldOptions = {}): World {
     maxTrailers: 0,
     maxEnemies: 0,
     boss: false,
+    maxSlowHearts: 0,
+    maxFullHearts: 0,
     ...options,
   });
 }

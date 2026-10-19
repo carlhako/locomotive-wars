@@ -14,6 +14,7 @@ export function makeSnapshot(over: Partial<SnapshotMsg> & { st: number }): Snaps
     dr: [],
     pr: [],
     mn: [],
+    ht: [],
     ev: [],
     ...over,
   };
@@ -45,6 +46,7 @@ export function makeOwn(over: Partial<OwnTrain> = {}): OwnTrain {
     rb: 1,
     cs: [],
     dn: [],
+    hd: 0,
     ...over,
   };
 }

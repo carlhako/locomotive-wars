@@ -112,6 +112,26 @@ export const TRAILER_TYPES: readonly TrailerType[] = [
   { kind: 'cloak', rarity: 0.3 },
 ];
 
+// ===== Hearts (new) =====
+/** World-spawned hearts the map holds at most, by kind. */
+export const MAX_SLOW_HEARTS = 6;
+export const MAX_FULL_HEARTS = 1;
+/** Seconds between world heart spawns while below the limit, by kind. */
+export const SLOW_HEART_RESPAWN = 8;
+export const FULL_HEART_RESPAWN = 60;
+/** Margin from the map edge for world heart spawns. */
+export const HEART_SPAWN_MARGIN = 100;
+/** A destroyed enemy drops a full heart with this chance... */
+export const FULL_HEART_DROP_CHANCE = 0.03;
+/** ...otherwise a slow heart with this chance (one roll, so never both). */
+export const SLOW_HEART_DROP_CHANCE = 0.2;
+/** A slow heart's dose heals this fraction of max hull... */
+export const HEAL_DOSE_FRACTION = 0.15;
+/** ...spread evenly over this many seconds. */
+export const HEAL_DOSE_DURATION = 8;
+/** Most active doses a train holds; one more replaces the dose with the least time left. */
+export const MAX_HEAL_DOSES = 20;
+
 // ===== Population =====
 /** ref:195 */
 export const MAX_TRAILERS = 60;
@@ -171,8 +191,11 @@ export const ENEMY_HIT_RADIUS = 18;
 export const BOSS_HIT_RADIUS = 28;
 /** new: a head within this distance of another train's lethal carriage is destroyed. */
 export const BODY_COLLISION_RADIUS = 14;
-/** new: carriages before this index are not lethal (the locomotive and the two behind it). */
-export const BODY_COLLISION_MIN_INDEX = 3;
+/**
+ * new: carriages before this index are not lethal (the locomotive and the car behind it). The
+ * client draws those carriages faded from this same constant.
+ */
+export const BODY_COLLISION_MIN_INDEX = 2;
 /** ref:1604 */
 export const RAM_RADIUS = 16;
 /** ref:1605 */
@@ -267,6 +290,10 @@ export const MAX_TRAIN_MINES = 24;
 export const MAX_TRAIN_PROJECTILES = 120;
 /** ref:731: bots fire only at a target this close to their head. */
 export const WEAPON_RANGE = 550;
+/** new: a new train aims this far ahead of its head, along its heading. */
+export const DEFAULT_AIM_DISTANCE = 200;
+/** new: a carriage this close to the aim point fires along the head's bearing to it instead. */
+export const AIM_CLOSE_RANGE = 40;
 /** ref:751: muzzle distance from the carriage. */
 export const WEAPON_MUZZLE_OFFSET = 9;
 /** ref:754 */

@@ -21,6 +21,7 @@ describe('effects soak', () => {
       shake: new ScreenShake(),
       hitFlash: new HitFlash(),
       screenFlash: { show: () => {} },
+      healFlash: { show: () => {} },
       killFeed,
       banner: { show: () => {}, popup: () => {} },
       sound: {
@@ -35,6 +36,8 @@ describe('effects soak', () => {
         bridgeOff: () => {},
         zap: () => {},
         mine: () => {},
+        slowHeal: () => {},
+        fullHeal: () => {},
       },
       turrets: { aim: () => {} },
       zaps: { add: () => {} },
@@ -53,7 +56,8 @@ describe('effects soak', () => {
         boost: f % 300 < 60,
         brake: false,
         fire: f % 200 < 120,
-        aim: f / 40,
+        aimX: Math.cos(f / 40) * 200,
+        aimY: Math.sin(f / 40) * 200,
       };
       const events = session.advance(dt, input);
       const view = session.view();

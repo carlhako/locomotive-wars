@@ -5,7 +5,14 @@ import { CORRECTION_MS, LocalTrain, MAX_EXTRAPOLATION_MS } from './localTrain.ts
 import { makeOwn } from './testing.ts';
 
 const SIZE = 6000;
-const STRAIGHT: TrainInput = { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
+const STRAIGHT: TrainInput = {
+  turn: 0,
+  boost: false,
+  brake: false,
+  fire: false,
+  aimX: 200,
+  aimY: 0,
+};
 const SNAP_MS = 1000 / 15;
 
 describe('LocalTrain', () => {

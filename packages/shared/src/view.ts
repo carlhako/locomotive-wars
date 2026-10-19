@@ -4,6 +4,7 @@ import type {
   CarriageKind,
   Controller,
   EnemyKind,
+  HeartKind,
   PickupKind,
   ProjectileKind,
 } from './sim/types.ts';
@@ -84,6 +85,13 @@ export interface DropView {
   age: number;
 }
 
+export interface HeartView {
+  id: number;
+  kind: HeartKind;
+  x: number;
+  y: number;
+}
+
 export interface ProjectileView {
   id: number;
   kind: ProjectileKind;
@@ -122,6 +130,9 @@ export interface WorldView {
   drops: DropView[];
   projectiles: ProjectileView[];
   mines: MineView[];
+  hearts: HeartView[];
+  /** Active healing doses on the local train, for the HUD. */
+  localDoses: number;
   /** One entry per living train. */
   minimap: MinimapEntry[];
 }
@@ -188,6 +199,8 @@ export function viewFromWorld(world: World, localId: number): WorldView {
       y: m.y,
       armed: m.age >= MINE_ARM_TIME,
     })),
+    hearts: s.hearts.map((h) => ({ id: h.id, kind: h.kind, x: h.x, y: h.y })),
+    localDoses: world.getTrain(localId)?.healDoses.length ?? 0,
     minimap: s.trains
       .filter((t) => t.alive)
       .map((t) => ({ id: t.id, x: t.x, y: t.y, color: t.color, isLocal: t.id === localId })),

@@ -6,7 +6,14 @@ import type { ConnectionStatus, DisconnectReason } from './connection.ts';
 import { makeOwn, makeSnapshot } from './testing.ts';
 import type { Connect, TransportHandlers } from './transport.ts';
 
-const STILL: TrainInput = { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
+const STILL: TrainInput = {
+  turn: 0,
+  boost: false,
+  brake: false,
+  fire: false,
+  aimX: 200,
+  aimY: 0,
+};
 
 /** A transport the test drives by hand. */
 class FakeServer {
@@ -212,9 +219,39 @@ describe('NetSession input', () => {
     server.sent.length = 0;
     for (let i = 0; i < 144; i++) {
       vi.advanceTimersByTime(1000 / 144);
-      session.advance(1 / 144, { ...STILL, aim: i * 0.01 });
+      session.advance(1 / 144, { ...STILL, aimX: 200 + i * 2 });
     }
     expect(server.of('in').length).toBeLessThanOrEqual(40);
+  });
+
+  it('sends the aim offset, rounded to 0.1 units', () => {
+    const session = makeSession();
+    online(session);
+    session.advance(0.016, { ...STILL, aimX: -120.04, aimY: 33.36 });
+    vi.advanceTimersByTime(100);
+    expect(server.of('in').at(-1)).toMatchObject({ ax: -120, ay: 33.4 });
+  });
+
+  it('sends only heartbeats for a still mouse while the train moves', () => {
+    const session = makeSession();
+    online(session);
+    const held = { ...STILL, aimX: 150, aimY: -80 };
+    session.advance(0.016, held);
+    vi.advanceTimersByTime(100);
+    server.sent.length = 0;
+    // A second of 60 fps frames, with the train moving on in every snapshot.
+    for (let f = 1; f <= 60; f++) {
+      vi.advanceTimersByTime(1000 / 60);
+      if (f % 4 === 0) {
+        const st = 1000 + 100 + f * (1000 / 60);
+        server.say(snapshot(st, { me: makeOwn({ x: 1000 + f * 3, y: 1000, cs: [982, 1000] }) }));
+      }
+      session.advance(1 / 60, held);
+    }
+    const sent = server.of('in');
+    // The heartbeat is due every 75-100 ms: about 10-14 in a second, and nothing more.
+    expect(sent.length).toBeLessThanOrEqual(14);
+    expect(sent.every((m) => m.ax === 150 && m.ay === -80)).toBe(true);
   });
 
   it('sends nothing once disconnected', () => {
@@ -566,5 +603,84 @@ describe('NetSession server full', () => {
     await expect(session.ready).rejects.toThrow('full');
     expect(session.reason).toBe('full');
     expect(session.fullInfo).toEqual({ humans: 16, max: 16 });
+  });
+});
+
+describe('NetSession projectiles and hearts', () => {
+  /** Snapshots every 66.7 ms from st 1000, each delivered as the clock reaches it. */
+  function play(session: NetSession, frames: Array<Parameters<typeof snapshot>[1]>): number {
+    online(session, 1000);
+    let st = 1000;
+    for (const over of frames) {
+      vi.advanceTimersByTime(66.7);
+      st += 66.7;
+      server.say(snapshot(st, over));
+    }
+    return st;
+  }
+
+  it('draws its own projectiles from the newest snapshot, run forward to now', () => {
+    const session = makeSession();
+    const enemy = (y: number) =>
+      [51, 4, 1200, y, 0, 240] as [number, number, number, number, number, number];
+    const own = (x: number) =>
+      [50, 0, x, 1000, 550, 0, 1] as [number, number, number, number, number, number, 1];
+    const newest = play(session, [
+      { pr: [enemy(1016), own(1100)] },
+      { pr: [enemy(1032), own(1137)] },
+      { pr: [enemy(1048), own(1174)] },
+    ]);
+    vi.advanceTimersByTime(40);
+    session.advance(0.016, STILL);
+    const shots = session.view().projectiles;
+    const mine = shots.find((p) => p.id === 50)!;
+    const theirs = shots.find((p) => p.id === 51)!;
+    // Newest snapshot plus 40 ms at 550 units/s.
+    expect(mine.x).toBeCloseTo(1174 + 550 * 0.04, 6);
+    expect(shots.filter((p) => p.id === 50)).toHaveLength(1);
+    // The drone's bullet is drawn 133 ms in the past, between the first two snapshots that had it.
+    const at = newest + 40 - 133;
+    const alpha = (at - (1000 + 66.7)) / 66.7;
+    expect(theirs.y).toBeCloseTo(1016 + 16 * alpha, 6);
+  });
+
+  it('caps how far its own projectiles are run forward', () => {
+    const session = makeSession();
+    const own = [50, 0, 1100, 1000, 550, 0, 1] as [
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      1,
+    ];
+    play(session, [{ pr: [own] }]);
+    vi.advanceTimersByTime(1000);
+    session.advance(0.016, STILL);
+    const mine = session.view().projectiles.find((p) => p.id === 50)!;
+    expect(mine.x).toBeCloseTo(1100 + 550 * 0.25, 6);
+  });
+
+  it('shows hearts in view and the own dose count', () => {
+    const session = makeSession();
+    play(session, [
+      {
+        me: makeOwn({ x: 1000, y: 1000, cs: [982, 1000], hd: 3 }),
+        ht: [
+          [60, 0, 1100, 1000],
+          [61, 1, 900, 1000],
+        ],
+      },
+    ]);
+    session.advance(0.016, STILL);
+    vi.advanceTimersByTime(200);
+    session.advance(0.016, STILL);
+    const view = session.view();
+    expect(view.hearts).toEqual([
+      { id: 60, kind: 'slow', x: 1100, y: 1000 },
+      { id: 61, kind: 'full', x: 900, y: 1000 },
+    ]);
+    expect(view.localDoses).toBe(3);
   });
 });

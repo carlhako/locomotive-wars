@@ -14,6 +14,8 @@ export type PickupKind = WeaponKind | AutoKind | DefenseKind | SupportKind;
 export type CarriageKind = 'locomotive' | PickupKind;
 
 export type EnemyKind = 'drone' | 'hunter' | 'sentry' | 'boss';
+/** Slow hearts give a healing dose; full hearts restore the hull at once. */
+export type HeartKind = 'slow' | 'full';
 export type ProjectileKind = 'bullet' | 'missile' | 'laser' | 'drone' | 'enemy' | 'flak';
 export type Controller = 'human' | 'bot';
 /** Who owns a projectile, took damage, or dealt it. Trains and enemies share one id space. */
@@ -35,8 +37,10 @@ export interface TrainInput {
   brake: boolean;
   /** Weapon carriages fire while this is on. */
   fire: boolean;
-  /** World-space aim angle in radians. */
-  aim: number;
+  /** Aim point minus the head position, in world units (x). */
+  aimX: number;
+  /** Aim point minus the head position, in world units (y). */
+  aimY: number;
 }
 
 /** One sample of the head's trail; `s` is the cumulative arc length travelled at the sample. */
@@ -114,6 +118,8 @@ export interface TrainState {
   ramReduction: number;
   /** Cloak carriages: any hides the train from other players' minimaps. */
   cloaks: number;
+  /** Seconds left on each active healing dose from slow hearts. */
+  healDoses: number[];
   path: PathSample[];
   ai: BotState;
   /** Seconds of spawn protection left; the train cannot be harmed, ram, or fire while above 0. */
@@ -176,6 +182,19 @@ export interface Mine {
   ownerId: number;
   /** Seconds since it was dropped. */
   age: number;
+}
+
+/**
+ * A heart on the map. It never becomes a carriage. `age` only advances for `dropped` hearts
+ * (from enemies and the boss), which expire like dropped pickups; the world's own never do.
+ */
+export interface Heart {
+  id: number;
+  kind: HeartKind;
+  x: number;
+  y: number;
+  age: number;
+  dropped: boolean;
 }
 
 /** A trailer on the map or a dropped pickup. `age` only advances for drops. */
@@ -242,6 +261,16 @@ export type SimEvent =
       y: number;
     }
   | {
+      type: 'heart';
+      trainId: number;
+      heartId: number;
+      kind: HeartKind;
+      /** Hull it restores: a slow heart's whole dose, or what a full heart restored. */
+      amount: number;
+      x: number;
+      y: number;
+    }
+  | {
       /** A train was removed from the world without being destroyed (its owner left). */
       type: 'trainLeft';
       trainId: number;
@@ -291,6 +320,10 @@ export interface WorldOptions {
   initialEnemies?: number;
   /** Whether the boss schedule runs. Default true. */
   boss?: boolean;
+  /** Slow hearts the world spawns and keeps up to. Default 6. */
+  maxSlowHearts?: number;
+  /** Full hearts the world spawns and keeps up to. Default 1. */
+  maxFullHearts?: number;
 }
 
 export type ResolvedWorldOptions = Required<WorldOptions>;
@@ -323,7 +356,10 @@ export interface WorldState {
   mines: Mine[];
   trailers: Pickup[];
   drops: Pickup[];
+  hearts: Heart[];
   trailerTimer: number;
+  /** Seconds until the next world heart of each kind, counted down while below its limit. */
+  heartTimers: Record<HeartKind, number>;
   enemyTimer: number;
   bossTimer: number;
   bossId: number | null;

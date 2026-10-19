@@ -1,9 +1,10 @@
+import { defaultAim } from '@lw/shared';
 import type { TrainInput } from '@lw/shared';
 
 /**
- * Keyboard and mouse capture, converted to the shared `TrainInput`. The aim angle is the
- * bearing from the local head's screen position to the mouse, so it is correct however the
- * camera is offset by smoothing or the map seam.
+ * Keyboard and mouse capture, converted to the shared `TrainInput`. The aim offset is the mouse
+ * minus the local head's screen position: the camera draws one world unit per pixel, so that is
+ * also the offset in the world, correct however the camera is offset by smoothing or the seam.
  */
 
 export type KeyAction = 'left' | 'right' | 'brake' | 'boost' | 'forward' | 'legend';
@@ -46,9 +47,14 @@ export function isTypingTarget(
   );
 }
 
-/** World-space aim angle for a mouse at (mouseX, mouseY) with the head at (headX, headY). */
-export function aimAngle(mouseX: number, mouseY: number, headX: number, headY: number): number {
-  return Math.atan2(mouseY - headY, mouseX - headX);
+/** Aim offset for a mouse at (mouseX, mouseY) with the head at (headX, headY) on screen. */
+export function aimOffset(
+  mouseX: number,
+  mouseY: number,
+  headX: number,
+  headY: number,
+): { aimX: number; aimY: number } {
+  return { aimX: mouseX - headX, aimY: mouseY - headY };
 }
 
 export class InputState {
@@ -125,16 +131,16 @@ export class InputState {
   }
 
   /**
-   * The input for the next tick. `head` is the local head's screen position; `fallbackAim` is
-   * used until the mouse has moved.
+   * The input for the next tick. `head` is the local head's screen position; until the mouse
+   * has moved, the aim is ahead of the head along `heading`, as for a newly spawned train.
    */
-  toTrainInput(head: { x: number; y: number }, fallbackAim: number): TrainInput {
+  toTrainInput(head: { x: number; y: number }, heading: number): TrainInput {
     return {
       turn: this.turn,
       boost: this.boost,
       brake: this.brake,
       fire: this.fire,
-      aim: this.mouse ? aimAngle(this.mouse.x, this.mouse.y, head.x, head.y) : fallbackAim,
+      ...(this.mouse ? aimOffset(this.mouse.x, this.mouse.y, head.x, head.y) : defaultAim(heading)),
     };
   }
 

@@ -149,6 +149,21 @@ describe('resetForRound', () => {
     expect(world.state.bossId).toBeNull();
   });
 
+  it('removes every heart and dose, then regenerates the map hearts', () => {
+    const world = emptyWorld({ maxSlowHearts: 6, maxFullHearts: 1 });
+    const t = world.addTrain({ protectedFor: 0 });
+    const before = world.state.hearts.map((h) => h.id);
+    expect(before).toHaveLength(7);
+    world.spawnHeart('slow', 100, 100, true);
+    t.healDoses = [5];
+    world.resetForRound(5);
+    expect(t.healDoses).toEqual([]);
+    expect(world.state.hearts.some((h) => h.dropped)).toBe(false);
+    expect(world.state.hearts.filter((h) => h.kind === 'slow')).toHaveLength(6);
+    expect(world.state.hearts.filter((h) => h.kind === 'full')).toHaveLength(1);
+    expect(world.state.hearts.some((h) => before.includes(h.id))).toBe(false);
+  });
+
   it('is reproducible from the seed', () => {
     const a = emptyWorld({ initialTrailers: 8, initialEnemies: 3 });
     const b = emptyWorld({ initialTrailers: 8, initialEnemies: 3 });

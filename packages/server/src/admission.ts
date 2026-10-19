@@ -1,8 +1,17 @@
 import { shortAngle } from '@lw/shared';
 import type { TrainInput } from '@lw/shared';
 
-/** An aim change larger than this many radians counts as activity. */
+/** An aim offset turning by more than this many radians counts as activity... */
 export const AIM_ACTIVITY = 0.05;
+/** ...as does its length changing by more than this many units. */
+export const AIM_LENGTH_ACTIVITY = 50;
+
+/** True when the aim offset moved enough, in direction or length, to count as activity. */
+function aimMoved(a: TrainInput, b: TrainInput): boolean {
+  const turned = shortAngle(Math.atan2(a.aimY, a.aimX) - Math.atan2(b.aimY, b.aimX));
+  const stretched = Math.hypot(a.aimX, a.aimY) - Math.hypot(b.aimX, b.aimY);
+  return Math.abs(turned) > AIM_ACTIVITY || Math.abs(stretched) > AIM_LENGTH_ACTIVITY;
+}
 
 /** True when connecting another human would exceed the limit. */
 export function isFull(humans: number, maxPlayers: number): boolean {
@@ -34,7 +43,7 @@ export class IdleTracker {
       input.boost !== b.boost ||
       input.brake !== b.brake ||
       input.fire !== b.fire ||
-      Math.abs(shortAngle(input.aim - b.aim)) > AIM_ACTIVITY;
+      aimMoved(input, b);
     if (!meaningful) return false;
     this.base = { ...input };
     this.idleTicks = 0;

@@ -8,6 +8,7 @@ import {
   TRAIN_FLAG_PROTECTED,
 } from '@lw/shared';
 import type { SnapshotMsg } from '@lw/shared';
+import { clampAim } from './server.ts';
 import type { GameServer } from './server.ts';
 import { sleep, startServer, TestClient } from './testing.ts';
 
@@ -111,7 +112,7 @@ describe('input', () => {
     const train = trainOf(c.id);
     const start0 = train.angle;
     for (let s = 1; s <= 10; s++) {
-      c.send({ t: 'in', s, tr: 1, b: 0, br: 0, f: 0, a: 0 });
+      c.send({ t: 'in', s, tr: 1, b: 0, br: 0, f: 0, ax: 0, ay: 0 });
       await sleep(50);
     }
     expect(train.input.turn).toBe(1);
@@ -121,10 +122,36 @@ describe('input', () => {
   it('clamps turn = 50 to 1', async () => {
     const port = await start();
     const c = await join(port);
-    c.send({ t: 'in', s: 1, tr: 50, b: 1, br: 1, f: 0, a: 1.25 });
+    c.send({ t: 'in', s: 1, tr: 50, b: 1, br: 1, f: 0, ax: 30, ay: -40 });
     await sleep(120);
     const input = trainOf(c.id).input;
-    expect(input).toEqual({ turn: 1, boost: true, brake: true, fire: false, aim: 1.25 });
+    expect(input).toEqual({
+      turn: 1,
+      boost: true,
+      brake: true,
+      fire: false,
+      aimX: 30,
+      aimY: -40,
+    });
+  });
+
+  it('scales an aim offset longer than 2000 units down to 2000', async () => {
+    const port = await start();
+    const c = await join(port);
+    c.send({ t: 'in', s: 1, tr: 0, b: 0, br: 0, f: 0, ax: 30000, ay: 0 });
+    await sleep(120);
+    expect(trainOf(c.id).input).toMatchObject({ aimX: 2000, aimY: 0 });
+    expect(clampAim(3000, -4000)).toEqual({ aimX: 1200, aimY: -1600 });
+  });
+
+  it('does not apply an input with a non-finite aim offset', async () => {
+    const port = await start();
+    const c = await join(port);
+    const before = { ...trainOf(c.id).input };
+    c.sendRaw('{"t":"in","s":1,"tr":1,"b":0,"br":0,"f":0,"ax":1e999,"ay":0}');
+    c.sendRaw('{"t":"in","s":2,"tr":1,"b":0,"br":0,"f":0,"ax":0,"ay":"up"}');
+    await sleep(120);
+    expect(trainOf(c.id).input).toEqual(before);
   });
 
   it("fires the train's weapons while fire is held", async () => {
@@ -132,7 +159,7 @@ describe('input', () => {
     const c = await join(port);
     const train = trainOf(c.id);
     train.protectedFor = 0;
-    c.send({ t: 'in', s: 1, tr: 0, b: 0, br: 0, f: 1, a: 0.5 });
+    c.send({ t: 'in', s: 1, tr: 0, b: 0, br: 0, f: 1, ax: 100, ay: 50 });
     await sleep(300);
     expect(train.input.fire).toBe(true);
     const fired = c
@@ -149,8 +176,8 @@ describe('input', () => {
     a.sendRaw('{not json');
     a.sendRaw('42');
     a.sendRaw('{"t":"in","s":1,"tr":"left","b":0,"br":0,"a":0}');
-    a.sendRaw('{"t":"in","s":2,"tr":0,"b":0,"br":0,"a":1e999}');
-    b.send({ t: 'in', s: 1, tr: -1, b: 0, br: 0, f: 0, a: 0 });
+    a.sendRaw('{"t":"in","s":2,"tr":0,"b":0,"br":0,"ax":1e999,"ay":0}');
+    b.send({ t: 'in', s: 1, tr: -1, b: 0, br: 0, f: 0, ax: 0, ay: 0 });
     await sleep(150);
     expect(a.closeCode).toBeNull();
     expect(trainOf(a.id).input.turn).toBe(0);
@@ -186,7 +213,7 @@ describe('input', () => {
     const train = trainOf(c.id);
     // 200 inputs in one burst: the first 60 count, the rest are dropped; none are malformed.
     for (let s = 1; s <= 200; s++) {
-      c.send({ t: 'in', s, tr: s <= MAX_INPUT_RATE ? 1 : -1, b: 0, br: 0, f: 0, a: 0 });
+      c.send({ t: 'in', s, tr: s <= MAX_INPUT_RATE ? 1 : -1, b: 0, br: 0, f: 0, ax: 0, ay: 0 });
     }
     await sleep(200);
     expect(train.input.turn).toBe(1);
@@ -253,7 +280,7 @@ describe('snapshots', () => {
   it('includes the full own train, rounded numbers, and the ack', async () => {
     const port = await start();
     const c = await join(port);
-    c.send({ t: 'in', s: 7, tr: 0, b: 0, br: 0, f: 0, a: 0 });
+    c.send({ t: 'in', s: 7, tr: 0, b: 0, br: 0, f: 0, ax: 0, ay: 0 });
     await c.waitFor(() => c.of('snap').some((s) => s.ack === 7));
     const snap = c.of('snap').find((s) => s.ack === 7) as SnapshotMsg;
     const train = trainOf(c.id);

@@ -13,6 +13,8 @@ export const INTERP_MS = Math.round((2 * 1000) / SNAPSHOT_RATE);
 export const INPUT_HEARTBEAT_MS = 100;
 /** Input messages beyond this many per second per session are dropped. */
 export const MAX_INPUT_RATE = 60;
+/** The server scales an aim offset longer than this (units) down to it, keeping its direction. */
+export const MAX_AIM_OFFSET = 2000;
 /** A connection that sends this many malformed messages is closed. */
 export const MAX_MALFORMED = 20;
 /** Largest message the server accepts from a client, in bytes. */

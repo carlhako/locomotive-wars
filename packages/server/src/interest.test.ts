@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SimEvent } from '@lw/shared';
+import type { SimEvent, TrainState } from '@lw/shared';
 import { MetaTracker, selectEvents, selectVisible, trainInView } from './interest.ts';
 import { buildSnapshot } from './snapshot.ts';
 import { emptyWorld } from './testing.ts';
@@ -82,6 +82,80 @@ describe('mines in view', () => {
       [501, owner.id, 1500, 1000, 1],
       [502, me.id, 1000, 1300, 0],
     ]);
+  });
+});
+
+describe('hearts, own projectiles, and doses', () => {
+  const snapOf = (world: ReturnType<typeof emptyWorld>, me: TrainState) =>
+    buildSnapshot({
+      tick: 1,
+      serverTimeMs: 0,
+      ack: 0,
+      own: me,
+      visible: selectVisible(world, me.x, me.y, 1600, me.id),
+      events: [],
+    });
+
+  it('sends a heart in range with its kind, and not one out of range', () => {
+    const world = emptyWorld();
+    const me = world.addTrain({ x: 1000, y: 1000 });
+    const full = world.spawnHeart('full', 1500, 1000);
+    const slow = world.spawnHeart('slow', 1000, 1200, true);
+    world.spawnHeart('slow', 4000, 4000);
+    expect(snapOf(world, me).ht).toEqual([
+      [full.id, 1, 1500, 1000],
+      [slow.id, 0, 1000, 1200],
+    ]);
+  });
+
+  it("flags only the session's own projectiles", () => {
+    const world = emptyWorld();
+    const me = world.addTrain({ x: 1000, y: 1000 });
+    const other = world.addTrain({ x: 1400, y: 1000 });
+    const base = {
+      kind: 'bullet' as const,
+      vx: 550,
+      vy: 0,
+      damage: 7,
+      life: 1,
+      splash: 0,
+      pierce: 1,
+      hitIds: [],
+    };
+    world.state.projectiles.push(
+      { ...base, id: 701, x: 1100, y: 1000, ownerKind: 'train', ownerId: me.id },
+      { ...base, id: 702, x: 1300, y: 1000, ownerKind: 'train', ownerId: other.id },
+      { ...base, id: 703, x: 1200, y: 1050, ownerKind: 'enemy', ownerId: me.id },
+    );
+    const pr = snapOf(world, me).pr;
+    expect(pr.map((r) => [r[0], r[6]])).toEqual([
+      [701, 1],
+      [702, undefined],
+      [703, undefined],
+    ]);
+    expect(pr[1]).toHaveLength(6);
+  });
+
+  it('reports the own train dose count', () => {
+    const world = emptyWorld();
+    const me = world.addTrain({ x: 1000, y: 1000 });
+    me.healDoses = [2, 7];
+    expect(snapOf(world, me).me?.hd).toBe(2);
+  });
+
+  it('routes heart events by position or by the collecting train', () => {
+    const e: SimEvent = {
+      type: 'heart',
+      trainId: 1,
+      heartId: 5,
+      kind: 'slow',
+      amount: 60,
+      x: 4000,
+      y: 4000,
+    };
+    expect(selectEvents([e], 1000, 1000, 1600, 1, 6000)).toEqual([e]);
+    expect(selectEvents([e], 1000, 1000, 1600, 2, 6000)).toEqual([]);
+    expect(selectEvents([e], 3800, 4000, 1600, 2, 6000)).toEqual([e]);
   });
 });
 

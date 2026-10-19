@@ -9,12 +9,15 @@ import {
   COWCATCHER_RAM_BONUS,
   COWCATCHER_RAM_REDUCTION,
   DAMAGE_REDUCTION_CAP,
+  DEFAULT_AIM_DISTANCE,
   FUEL_BONUS,
   FUEL_CAPACITY_PER_BONUS,
   FUEL_DRAIN,
   FUEL_MAX,
   FUEL_REGEN,
   FUEL_REGEN_PER_BONUS,
+  HEAL_DOSE_DURATION,
+  HEAL_DOSE_FRACTION,
   HULL_PER_CARRIAGE,
   HULL_REGEN,
   INITIAL_HULL,
@@ -54,6 +57,14 @@ export interface TrainSpawn {
   angle: number;
 }
 
+/** The aim offset a train uses before it is told otherwise: `DEFAULT_AIM_DISTANCE` ahead. */
+export function defaultAim(angle: number): { aimX: number; aimY: number } {
+  return {
+    aimX: Math.cos(angle) * DEFAULT_AIM_DISTANCE,
+    aimY: Math.sin(angle) * DEFAULT_AIM_DISTANCE,
+  };
+}
+
 /** Creates a train with just its locomotive, laid out along a straight trail behind the head. */
 export function createTrain(spawn: TrainSpawn, rules: TrainRules): TrainState {
   const train: TrainState = {
@@ -68,7 +79,7 @@ export function createTrain(spawn: TrainSpawn, rules: TrainRules): TrainState {
     hull: INITIAL_HULL,
     maxHull: INITIAL_HULL,
     fuel: FUEL_MAX,
-    input: { turn: 0, boost: false, brake: false, fire: false, aim: spawn.angle },
+    input: { turn: 0, boost: false, brake: false, fire: false, ...defaultAim(spawn.angle) },
     boostLocked: false,
     boosting: false,
     bridgeActive: false,
@@ -84,6 +95,7 @@ export function createTrain(spawn: TrainSpawn, rules: TrainRules): TrainState {
     ramBonus: 0,
     ramReduction: 0,
     cloaks: 0,
+    healDoses: [],
     path: createPath(spawn.x, spawn.y, spawn.angle),
     ai: {
       mode: 'wander',
@@ -172,6 +184,14 @@ export function hullRegenOf(train: TrainState): number {
   return HULL_REGEN + Math.min(REPAIR_CAP, train.repairBonus);
 }
 
+/** Hull one healing dose restores in total, at the train's current max hull. */
+export function doseTotalOf(train: Pick<TrainState, 'maxHull'>): number {
+  return HEAL_DOSE_FRACTION * train.maxHull;
+}
+
+/** Dose timers below this many seconds count as run out. */
+const DOSE_EPSILON = 1e-9;
+
 /**
  * Appends a carriage and applies its effect. Returns false, changing nothing, when the train
  * is at its carriage limit.
@@ -225,7 +245,8 @@ export function addCarriage(
 
 /**
  * Advances one tick of locomotion: turn, speed (boost, brake), position, trail, carriage
- * placement, and hull regeneration (repair cars included). Weapons and bridge checks are separate steps.
+ * placement, and hull regeneration (repair cars and healing doses included). Weapons and bridge
+ * checks are separate steps.
  */
 export function advanceTrain(train: TrainState, dt: number, rules: TrainRules): void {
   const input = train.input;
@@ -255,7 +276,12 @@ export function advanceTrain(train: TrainState, dt: number, rules: TrainRules): 
   trimPath(train.path, (rules.maxCarriages + PATH_MARGIN_CARRIAGES) * rules.spacing);
   placeCarriages(train, rules);
 
-  train.hull = Math.min(train.maxHull, train.hull + hullRegenOf(train) * dt);
+  // Each active dose adds its own rate, read from the max hull of this tick.
+  const doseRate = (train.healDoses.length * doseTotalOf(train)) / HEAL_DOSE_DURATION;
+  train.hull = Math.min(train.maxHull, train.hull + (hullRegenOf(train) + doseRate) * dt);
+  if (train.healDoses.length > 0) {
+    train.healDoses = train.healDoses.map((t) => t - dt).filter((t) => t > DOSE_EPSILON);
+  }
 }
 
 /** Recomputes carriage positions from the trail. */

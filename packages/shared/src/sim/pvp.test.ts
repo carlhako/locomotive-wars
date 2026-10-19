@@ -109,7 +109,7 @@ describe('spawn protection', () => {
     const world = emptyWorld();
     const a = world.addTrain({ x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
     train(world, { x: 1300, y: 1000, angle: Math.PI });
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     expect(ofType(run(world, 30), 'fired')).toHaveLength(0);
     a.protectedFor = 0;
     expect(ofType(run(world, 5), 'fired').length).toBeGreaterThan(0);
@@ -119,7 +119,7 @@ describe('spawn protection', () => {
     const world = emptyWorld();
     const shooter = train(world, { x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
     const target = world.addTrain({ x: 1300, y: 1000, angle: Math.PI, carriages: [] });
-    world.setInput(shooter.id, { aim: 0, fire: true });
+    world.setInput(shooter.id, { aimX: 1000, aimY: 0, fire: true });
     const events = run(world, 20);
     expect(ofType(events, 'fired').filter((f) => f.ownerId === shooter.id).length).toBeGreaterThan(
       0,
@@ -179,13 +179,45 @@ describe('body collisions', () => {
     });
   });
 
-  it('lets two heads pass through each other, and the three carriages behind them', () => {
+  it('lets two heads pass through each other, and the two carriages behind them', () => {
     const world = emptyWorld();
-    const a = train(world, { x: 3000, y: 3000, angle: 0, carriages: ['armor', 'armor'] });
-    const b = train(world, { x: 3012, y: 3000, angle: Math.PI, carriages: ['armor', 'armor'] });
-    expect(a.carriages).toHaveLength(3);
+    const a = train(world, { x: 3000, y: 3000, angle: 0, carriages: ['armor'] });
+    const b = train(world, { x: 3012, y: 3000, angle: Math.PI, carriages: ['armor'] });
+    expect(a.carriages).toHaveLength(2);
     expect(ofType(run(world, 3), 'trainDestroyed')).toHaveLength(0);
     expect(a.alive && b.alive).toBe(true);
+  });
+
+  it('destroys a head that touches the carriage at index 2', () => {
+    const world = emptyWorld();
+    const owner = train(world, { x: 3000, y: 3000, angle: 0, carriages: BODY });
+    // After this tick's move the head is at x=3006 and carriage 2 at 3006 - 3 * 18 = 2952.
+    const rammer = train(world, { x: 2952, y: 2990, angle: Math.PI / 2 });
+    const destroyed = ofType(world.step(), 'trainDestroyed');
+    expect(owner.carriages[2]!.x).toBeCloseTo(2952);
+    expect(destroyed).toHaveLength(1);
+    expect(destroyed[0]).toMatchObject({ victimId: rammer.id, killerTrainId: owner.id });
+  });
+
+  it('spares a head that touches the carriage at index 1', () => {
+    const world = emptyWorld();
+    const owner = train(world, { x: 3000, y: 3000, angle: 0, carriages: BODY });
+    const rammer = train(world, { x: 2970, y: 2990, angle: Math.PI / 2 });
+    expect(ofType(world.step(), 'trainDestroyed')).toHaveLength(0);
+    expect(owner.carriages[1]!.x).toBeCloseTo(2970);
+    expect(rammer.alive && owner.alive).toBe(true);
+  });
+
+  it('gives a starter train no lethal body', () => {
+    const world = emptyWorld();
+    const starter = train(world, { x: 3000, y: 3000, angle: 0, carriages: ['mg'] });
+    const rammer = train(world, { x: 1000, y: 1000, angle: 0 });
+    for (const target of [starter, ...starter.carriages]) {
+      rammer.x = target.x;
+      rammer.y = target.y;
+      collideTrains(world);
+      expect(rammer.alive && starter.alive).toBe(true);
+    }
   });
 
   it('destroys both trains, each credited to the other, on a mutual ram', () => {
@@ -246,7 +278,11 @@ describe('body collisions', () => {
       carriages: Array(40).fill('armor'),
     });
     const rammer = train(world, { x: 1800, y: 1960, angle: 0.2 });
-    world.setInput(rammer.id, { boost: true, aim: 0.2 });
+    world.setInput(rammer.id, {
+      boost: true,
+      aimX: Math.cos(0.2) * 200,
+      aimY: Math.sin(0.2) * 200,
+    });
     const destroyed = ofType(run(world, 60), 'trainDestroyed');
     expect(destroyed).toHaveLength(1);
     expect(destroyed[0]).toMatchObject({

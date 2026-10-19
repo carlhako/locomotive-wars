@@ -2,13 +2,14 @@ import { wrapPos } from '@lw/shared';
 import type { TrainView } from '@lw/shared';
 import type { DrawEnv } from '../render/canvas.ts';
 import { onScreen, screenX, screenY } from '../render/canvas.ts';
+import { traceHeart } from '../render/hearts.ts';
 
 /**
  * Client-side particles. They are purely cosmetic and use `Math.random`; nothing here can
  * influence the simulation, which keeps the shared rules deterministic.
  */
 
-export type ParticleType = 'smoke' | 'heat' | 'spark';
+export type ParticleType = 'smoke' | 'heat' | 'spark' | 'heart';
 
 export interface Particle {
   x: number;
@@ -90,6 +91,11 @@ export class ParticleSystem implements ParticleSink {
         ctx.fillStyle = p.color;
         ctx.beginPath();
         ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.type === 'heart') {
+        ctx.globalAlpha = Math.min(1, Math.max(0, p.life * 1.5));
+        ctx.fillStyle = p.color;
+        traceHeart(ctx, px, py, p.size);
         ctx.fill();
       } else {
         const k = p.type === 'spark' ? 2.5 : 1.5;

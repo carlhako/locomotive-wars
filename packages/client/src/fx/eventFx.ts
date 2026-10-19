@@ -3,7 +3,7 @@ import type { EnemyKind, SimEvent, WorldView } from '@lw/shared';
 import type { SoundPlayer } from '../audio/sound.ts';
 import type { BannerSink, ScreenFlashSink } from '../hud/banner.ts';
 import type { KillFeedSink } from '../hud/killfeed.ts';
-import { CARRIAGE_TYPES } from '../render/palette.ts';
+import { CARRIAGE_TYPES, HEAL_COLOR, HEART_COLORS } from '../render/palette.ts';
 import type { DamageNumberSink } from './damageNumbers.ts';
 import type { HitFlashSink } from './hitFlash.ts';
 import { burst, muzzleSparks } from './particles.ts';
@@ -20,6 +20,8 @@ export interface FxTargets {
   hitFlash: HitFlashSink;
   /** Red vignette over the whole screen. */
   screenFlash: ScreenFlashSink;
+  /** Green vignette over the whole screen, for a full heal. */
+  healFlash: ScreenFlashSink;
   killFeed: KillFeedSink;
   banner: BannerSink;
   sound: SoundPlayer;
@@ -294,6 +296,35 @@ export function applyEvents(events: readonly SimEvent[], ctx: FxContext, fx: FxT
           rand,
         );
         if (e.trainId === localId) fx.sound.pickup();
+        break;
+      }
+
+      case 'heart': {
+        const full = e.kind === 'full';
+        burst(
+          fx.particles,
+          e.x,
+          e.y,
+          {
+            count: full ? 16 : 8,
+            speed: [40, 140],
+            life: [0.6, 1.0],
+            color: [HEART_COLORS[e.kind], HEAL_COLOR],
+            size: full ? [4, 6] : [3, 4],
+            type: 'heart',
+          },
+          rand,
+        );
+        // A full heart at full hull restores nothing, so there is no number to show.
+        if (e.amount > 0) fx.damageNumbers.add(e.x, e.y, e.amount, HEAL_COLOR, '+');
+        if (e.trainId === localId) {
+          if (full) {
+            fx.healFlash.show();
+            fx.sound.fullHeal();
+          } else {
+            fx.sound.slowHeal();
+          }
+        }
         break;
       }
 

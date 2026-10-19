@@ -15,6 +15,10 @@ export interface SoundPlayer {
   zap(): void;
   /** A mine going off: a low thump. */
   mine(): void;
+  /** The local train collected a slow heart: a soft rising chime. */
+  slowHeal(): void;
+  /** The local train collected a full heart: a bright rising arpeggio. */
+  fullHeal(): void;
 }
 
 // ===== Mute persistence =====
@@ -67,6 +71,7 @@ const MIN_GAP_MS: Record<string, number> = {
   pickup: 60,
   zap: 70,
   mine: 90,
+  heal: 60,
 };
 
 export class SoundFX implements SoundPlayer {
@@ -254,5 +259,18 @@ export class SoundFX implements SoundPlayer {
     if (!this.ready('mine')) return;
     this.blip(70, 0.3, 0.32, 'sine', -35);
     this.noise(0.25, 0.22, 450);
+  }
+
+  slowHeal(): void {
+    if (!this.ready('heal')) return;
+    this.blip(660, 0.12, 0.14, 'sine', 220);
+    this.later(70, () => this.blip(880, 0.14, 0.12, 'sine', 180));
+  }
+
+  fullHeal(): void {
+    if (!this.ready('heal')) return;
+    [523, 659, 784, 1047].forEach((f, i) => {
+      this.later(i * 70, () => this.blip(f, 0.16, 0.16, 'triangle', 120));
+    });
   }
 }

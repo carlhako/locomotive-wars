@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { TrainInput } from '@lw/shared';
 import { AIM_ACTIVITY, IdleTracker, isFull } from './admission.ts';
 
-const IDLE: TrainInput = { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
+const IDLE: TrainInput = {
+  turn: 0,
+  boost: false,
+  brake: false,
+  fire: false,
+  aimX: 200,
+  aimY: 0,
+};
 
 describe('isFull', () => {
   it('is full at the limit', () => {
@@ -38,17 +45,36 @@ describe('IdleTracker.observe', () => {
     expect(t.idleTicks).toBe(0);
   });
 
-  it('counts an aim change beyond 0.05 rad, measured the short way round', () => {
-    expect(new IdleTracker(IDLE).observe({ ...IDLE, aim: AIM_ACTIVITY * 0.9 })).toBe(false);
-    expect(new IdleTracker(IDLE).observe({ ...IDLE, aim: AIM_ACTIVITY * 1.1 })).toBe(true);
-    const wrap = new IdleTracker({ ...IDLE, aim: Math.PI - 0.01 });
-    expect(wrap.observe({ ...IDLE, aim: -Math.PI + 0.01 })).toBe(false);
+  /** An aim offset `len` units long at `angle` radians. */
+  const aim = (angle: number, len = 200) => ({
+    aimX: Math.cos(angle) * len,
+    aimY: Math.sin(angle) * len,
+  });
+
+  it('counts an aim turn beyond 0.05 rad, measured the short way round', () => {
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, ...aim(AIM_ACTIVITY * 0.9) })).toBe(false);
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, ...aim(AIM_ACTIVITY * 1.1) })).toBe(true);
+    const wrap = new IdleTracker({ ...IDLE, ...aim(Math.PI - 0.01) });
+    expect(wrap.observe({ ...IDLE, ...aim(-Math.PI + 0.01) })).toBe(false);
+  });
+
+  it('counts an aim offset growing or shrinking by more than 50 units', () => {
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, ...aim(0, 240) })).toBe(false);
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, ...aim(0, 260) })).toBe(true);
+    expect(new IdleTracker(IDLE).observe({ ...IDLE, ...aim(0, 140) })).toBe(true);
+  });
+
+  it('ignores small mouse jitter but not a sweep', () => {
+    const t = new IdleTracker(IDLE);
+    expect(t.observe({ ...IDLE, aimX: 203, aimY: -4 })).toBe(false);
+    expect(t.observe({ ...IDLE, aimX: 197, aimY: 5 })).toBe(false);
+    expect(t.observe({ ...IDLE, aimX: 120, aimY: 160 })).toBe(true);
   });
 
   it('measures slow drift from the last counted input, not the previous message', () => {
     const t = new IdleTracker(IDLE);
-    expect(t.observe({ ...IDLE, aim: 0.03 })).toBe(false);
-    expect(t.observe({ ...IDLE, aim: 0.06 })).toBe(true);
+    expect(t.observe({ ...IDLE, ...aim(0.03) })).toBe(false);
+    expect(t.observe({ ...IDLE, ...aim(0.06) })).toBe(true);
   });
 });
 

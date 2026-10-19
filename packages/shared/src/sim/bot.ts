@@ -11,6 +11,7 @@ import {
   WEAPON_RANGE,
 } from './constants.ts';
 import { nearestHostile } from './combat.ts';
+import { defaultAim } from './train.ts';
 import { clamp, shortAngle, wrapAngle, wrapDelta, wrapDist } from './math.ts';
 import type { Rng } from './rng.ts';
 import type { TrainInput, TrainState } from './types.ts';
@@ -24,7 +25,7 @@ import type { World } from './world.ts';
  */
 export function botInput(world: World, trainId: number, rng: Rng): TrainInput {
   const train = world.getTrain(trainId);
-  if (!train) return { turn: 0, boost: false, brake: false, fire: false, aim: 0 };
+  if (!train) return { turn: 0, boost: false, brake: false, fire: false, aimX: 0, aimY: 0 };
   const size = world.rules.size;
   const ai = train.ai;
 
@@ -53,7 +54,8 @@ export function botInput(world: World, trainId: number, rng: Rng): TrainInput {
     boost: (ai.mode === 'flee' || ai.mode === 'attack') && train.fuel > BOT_BOOST_MIN_FUEL,
     brake: false,
     fire: shot.fire,
-    aim: shot.aim,
+    aimX: shot.aimX,
+    aimY: shot.aimY,
   };
 }
 
@@ -110,11 +112,16 @@ function decide(world: World, train: TrainState, rng: Rng): void {
 }
 
 /**
- * Aim and fire for a bot: at the nearest enemy or unprotected other train's head in weapon
- * range, firing; otherwise straight ahead, holding fire.
+ * Aim and fire for a bot: the aim offset points at the nearest enemy or unprotected other train's
+ * head in weapon range, firing; otherwise ahead along the heading, holding fire.
  */
-function aimAt(world: World, train: TrainState): { aim: number; fire: boolean } {
+function aimAt(world: World, train: TrainState): { aimX: number; aimY: number; fire: boolean } {
   const target = nearestHostile(world, train, train.x, train.y, WEAPON_RANGE);
-  if (!target) return { aim: train.angle, fire: false };
-  return { aim: wrapAngle(train.x, train.y, target.x, target.y, world.rules.size), fire: true };
+  if (!target) return { ...defaultAim(train.angle), fire: false };
+  const size = world.rules.size;
+  return {
+    aimX: wrapDelta(target.x - train.x, size),
+    aimY: wrapDelta(target.y - train.y, size),
+    fire: true,
+  };
 }

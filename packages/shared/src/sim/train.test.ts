@@ -29,11 +29,18 @@ describe('train control input', () => {
     const world = emptyWorld();
     const train = world.addTrain({ protectedFor: 0, carriages: [], angle: 1 });
     world.setInput(train.id, { turn: 5, boost: true });
-    world.setInput(train.id, { aim: 2 });
-    expect(train.input).toEqual({ turn: 1, boost: true, brake: false, fire: false, aim: 2 });
-    world.setInput(train.id, { turn: Number.NaN, aim: Infinity });
+    world.setInput(train.id, { aimX: 30, aimY: -40 });
+    expect(train.input).toEqual({
+      turn: 1,
+      boost: true,
+      brake: false,
+      fire: false,
+      aimX: 30,
+      aimY: -40,
+    });
+    world.setInput(train.id, { turn: Number.NaN, aimX: Infinity, aimY: Number.NaN });
     expect(train.input.turn).toBe(1);
-    expect(train.input.aim).toBe(2);
+    expect(train.input).toMatchObject({ aimX: 30, aimY: -40 });
   });
 });
 

@@ -17,13 +17,20 @@ import {
   ENEMY_RESPAWN_MIN,
   ENEMY_RESPAWN_SPAN,
   ENEMY_SPAWN_MARGIN,
+  FULL_HEART_RESPAWN,
+  HEAL_DOSE_DURATION,
+  HEART_SPAWN_MARGIN,
   INITIAL_ENEMIES,
   INITIAL_TRAILERS,
   MAP_SIZE,
   MAX_CARRIAGES,
   MAX_ENEMIES,
+  MAX_FULL_HEARTS,
+  MAX_HEAL_DOSES,
+  MAX_SLOW_HEARTS,
   MAX_TRAILERS,
   CARRIAGE_SPACING,
+  SLOW_HEART_RESPAWN,
   SPAWN_PROTECTION,
   TICK_RATE,
   TRAILER_RESPAWN,
@@ -46,6 +53,7 @@ import {
   addCarriage,
   advanceTrain,
   createTrain,
+  doseTotalOf,
   noteScore,
   pickupRadiusOf,
   updateBridge,
@@ -55,6 +63,8 @@ import type {
   AddTrainOptions,
   EnemyKind,
   EnemyState,
+  Heart,
+  HeartKind,
   Pickup,
   PickupKind,
   ResolvedWorldOptions,
@@ -69,6 +79,11 @@ import type {
 const STARTER_CARRIAGES: readonly PickupKind[] = ['mg'];
 /** Protection timers below this many seconds count as expired. */
 const PROTECTION_EPSILON = 1e-9;
+/** Seconds between world heart spawns while below the limit. */
+const HEART_RESPAWN: Record<HeartKind, number> = {
+  slow: SLOW_HEART_RESPAWN,
+  full: FULL_HEART_RESPAWN,
+};
 
 /**
  * The authoritative game world: any number of trains (human or bot), PvE enemies, a boss,
@@ -99,6 +114,8 @@ export class World {
       initialTrailers: options.initialTrailers ?? INITIAL_TRAILERS,
       initialEnemies: options.initialEnemies ?? INITIAL_ENEMIES,
       boss: options.boss ?? true,
+      maxSlowHearts: options.maxSlowHearts ?? MAX_SLOW_HEARTS,
+      maxFullHearts: options.maxFullHearts ?? MAX_FULL_HEARTS,
     };
     this.rng = new Rng(this.options.seed);
     this.dt = 1 / this.options.tickRate;
@@ -117,13 +134,16 @@ export class World {
       mines: [],
       trailers: [],
       drops: [],
+      hearts: [],
       trailerTimer: 0,
+      heartTimers: { ...HEART_RESPAWN },
       enemyTimer: 0,
       bossTimer: BOSS_INTERVAL,
       bossId: null,
     };
     for (let i = 0; i < this.options.initialTrailers; i++) this.spawnTrailer();
     for (let i = 0; i < this.options.initialEnemies; i++) this.spawnEnemy();
+    this.fillHearts();
   }
 
   // ===== Internals used by the sim modules =====
@@ -159,6 +179,31 @@ export class World {
     };
     this.state.drops.push(drop);
     return drop;
+  }
+
+  /**
+   * Puts a heart into the world, at a random position when none is given. A `dropped` heart
+   * (from an enemy or the boss) expires after 35 seconds and does not count toward the map's
+   * limits.
+   */
+  spawnHeart(kind: HeartKind, x?: number, y?: number, dropped = false): Heart {
+    let px = x;
+    let py = y;
+    if (px === undefined || py === undefined) {
+      const pos = this.randomPos(HEART_SPAWN_MARGIN);
+      px = pos.x;
+      py = pos.y;
+    }
+    const heart: Heart = {
+      id: this.newId(),
+      kind,
+      x: wrapPos(px, this.rules.size),
+      y: wrapPos(py, this.rules.size),
+      age: 0,
+      dropped,
+    };
+    this.state.hearts.push(heart);
+    return heart;
   }
 
   /** Nearest living train to a point, optionally limited to human-controlled ones. */
@@ -261,9 +306,10 @@ export class World {
   }
 
   /**
-   * Starts a fresh round: clears enemies, projectiles, mines, pickups, and the boss, regenerates
-   * trailers and enemies, restarts the boss schedule, and respawns every train as a protected
-   * starter with its round best and kills back at zero. The random source is reseeded, so a
+   * Starts a fresh round: clears enemies, projectiles, mines, pickups, hearts, and the boss,
+   * regenerates trailers, enemies, and the map's hearts, restarts the boss schedule, and respawns
+   * every train as a protected starter (with no healing doses) with its round best and kills back
+   * at zero. The random source is reseeded, so a
    * round is reproducible from its seed and the inputs that follow.
    */
   resetForRound(seed: number): void {
@@ -277,12 +323,15 @@ export class World {
     s.mines = [];
     s.trailers = [];
     s.drops = [];
+    s.hearts = [];
     s.bossId = null;
     s.bossTimer = BOSS_INTERVAL;
     s.trailerTimer = 0;
+    s.heartTimers = { ...HEART_RESPAWN };
     s.enemyTimer = 0;
     for (let i = 0; i < this.options.initialTrailers; i++) this.spawnTrailer();
     for (let i = 0; i < this.options.initialEnemies; i++) this.spawnEnemy();
+    this.fillHearts();
     for (const train of [...s.trains]) {
       this.respawnTrain(train.id);
       train.roundBest = 0;
@@ -321,7 +370,8 @@ export class World {
     if (typeof input.turn === 'number' && Number.isFinite(input.turn)) {
       cur.turn = clamp(input.turn, -1, 1);
     }
-    if (typeof input.aim === 'number' && Number.isFinite(input.aim)) cur.aim = input.aim;
+    if (typeof input.aimX === 'number' && Number.isFinite(input.aimX)) cur.aimX = input.aimX;
+    if (typeof input.aimY === 'number' && Number.isFinite(input.aimY)) cur.aimY = input.aimY;
     if (typeof input.boost === 'boolean') cur.boost = input.boost;
     if (typeof input.brake === 'boolean') cur.brake = input.brake;
     if (typeof input.fire === 'boolean') cur.fire = input.fire;
@@ -425,6 +475,7 @@ export class World {
     stepProjectiles(this);
     stepMines(this);
     this.collectPickups();
+    this.collectHearts();
     ramEnemies(this);
     this.expireDrops();
     s.enemies = s.enemies.filter((e) => e.hull > 0);
@@ -478,10 +529,71 @@ export class World {
     return kept;
   }
 
+  /**
+   * Living trains use up every heart within their pickup radius, whatever their hull: a slow
+   * heart adds a healing dose (replacing the one with the least time left at the limit), a full
+   * heart restores the hull to max.
+   */
+  private collectHearts(): void {
+    const s = this.state;
+    const size = this.rules.size;
+    for (const train of s.trains) {
+      if (!train.alive) continue;
+      const radius = pickupRadiusOf(train);
+      const kept: Heart[] = [];
+      for (const h of s.hearts) {
+        if (wrapDist(train.x, train.y, h.x, h.y, size) >= radius) {
+          kept.push(h);
+          continue;
+        }
+        let amount: number;
+        if (h.kind === 'full') {
+          amount = train.maxHull - train.hull;
+          train.hull = train.maxHull;
+        } else {
+          amount = doseTotalOf(train);
+          const doses = train.healDoses;
+          if (doses.length < MAX_HEAL_DOSES) doses.push(HEAL_DOSE_DURATION);
+          else doses[doses.indexOf(Math.min(...doses))] = HEAL_DOSE_DURATION;
+        }
+        this.emit({
+          type: 'heart',
+          trainId: train.id,
+          heartId: h.id,
+          kind: h.kind,
+          amount: Math.round(amount),
+          x: h.x,
+          y: h.y,
+        });
+      }
+      s.hearts = kept;
+    }
+  }
+
   private expireDrops(): void {
     const dt = this.dt;
     for (const d of this.state.drops) d.age += dt;
     this.state.drops = this.state.drops.filter((d) => d.age <= DROP_LIFETIME);
+    for (const h of this.state.hearts) if (h.dropped) h.age += dt;
+    this.state.hearts = this.state.hearts.filter((h) => h.age <= DROP_LIFETIME);
+  }
+
+  /** World-spawned hearts of a kind currently on the map. */
+  private worldHearts(kind: HeartKind): number {
+    let n = 0;
+    for (const h of this.state.hearts) if (h.kind === kind && !h.dropped) n++;
+    return n;
+  }
+
+  private heartLimit(kind: HeartKind): number {
+    return kind === 'slow' ? this.options.maxSlowHearts : this.options.maxFullHearts;
+  }
+
+  /** Spawns world hearts of each kind up to its limit. */
+  private fillHearts(): void {
+    for (const kind of ['slow', 'full'] as const) {
+      for (let n = this.worldHearts(kind); n < this.heartLimit(kind); n++) this.spawnHeart(kind);
+    }
   }
 
   private replenish(): void {
@@ -493,6 +605,14 @@ export class World {
         s.trailerTimer =
           TRAILER_RESPAWN * (TRAILER_RESPAWN_MIN + this.rng.next() * TRAILER_RESPAWN_SPAN);
         this.spawnTrailer();
+      }
+    }
+    for (const kind of ['slow', 'full'] as const) {
+      if (this.worldHearts(kind) >= this.heartLimit(kind)) continue;
+      s.heartTimers[kind] -= dt;
+      if (s.heartTimers[kind] <= 0) {
+        s.heartTimers[kind] = HEART_RESPAWN[kind];
+        this.spawnHeart(kind);
       }
     }
     if (s.enemies.length < this.options.maxEnemies) {

@@ -17,40 +17,43 @@ const world = new World({ seed: 42 }); // 30 Hz, 6000-unit wrapping map
 const me = world.addTrain({ name: 'You', controller: 'human' }); // locomotive + MG, protected
 world.addTrain({ controller: 'bot', carriages: ['laser'] });
 
-world.setInput(me.id, { turn: 1, boost: true, aim: 0.5 });
+world.setInput(me.id, { turn: 1, boost: true, aimX: 200, aimY: -100 });
 const events = world.step(); // advances exactly one tick, returns what happened
 ```
 
 ## World API
 
-| API                              | Purpose                                                                                                                                   |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `new World(options?)`            | Creates a world; places the initial trailers and enemies from the seed.                                                                   |
-| `addTrain(opts?)` → `TrainState` | Adds a train: locomotive plus `carriages` (default: one MG, the starter), full hull and fuel, spawn-protected unless `protectedFor` is 0. |
-| `respawnTrain(id)` → `boolean`   | Resets a train in place to a fresh protected starter at a new safe position; keeps id, name, colour, controller, and controls.            |
-| `findSpawnPosition(exceptId?)`   | A random position at least 800 units from every other head and 300 from every enemy (best effort after 20 tries).                         |
-| `removeTrain(id, {drop?})`       | Removes a train; returns whether it existed. A living train's removal emits `trainLeft`; `drop` scatters half its carriages as pickups.   |
-| `setInput(id, input)`            | Sets any of `turn`, `boost`, `brake`, `aim` on a train. Unset fields and later ticks keep the last value.                                 |
-| `step()` → `SimEvent[]`          | Advances one fixed tick and returns that tick's events in order.                                                                          |
-| `addCarriage(trainId, kind)`     | Gives a train a carriage as if picked up. `false` at the carriage limit.                                                                  |
-| `spawnTrailer(x?, y?, kind?)`    | Places a trailer (random position and type when omitted).                                                                                 |
-| `spawnEnemy(kind?, x?, y?)`      | Places a `drone`, `hunter`, or `sentry`.                                                                                                  |
-| `spawnBoss()`                    | Spawns the boss now, or returns the living one.                                                                                           |
-| `getTrain(id)`, `getEnemy(id)`   | Lookups by id.                                                                                                                            |
-| `state`                          | All mutable state as plain data (`trains`, `enemies`, `projectiles`, `trailers`, `drops`, timers, `tick`, `time`).                        |
-| `rng`, `dt`, `rules`, `options`  | The seeded random source, seconds per tick, shared geometry, and resolved options.                                                        |
-| `serializeWorld(world)`          | Stable string of the whole state including the random generator, for determinism checks and snapshots.                                    |
-| `botInput(world, trainId, rng)`  | The bot controller as a function returning a `TrainInput`.                                                                                |
+| API                                  | Purpose                                                                                                                                   |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `new World(options?)`                | Creates a world; places the initial trailers and enemies from the seed.                                                                   |
+| `addTrain(opts?)` → `TrainState`     | Adds a train: locomotive plus `carriages` (default: one MG, the starter), full hull and fuel, spawn-protected unless `protectedFor` is 0. |
+| `respawnTrain(id)` → `boolean`       | Resets a train in place to a fresh protected starter at a new safe position; keeps id, name, colour, controller, and controls.            |
+| `findSpawnPosition(exceptId?)`       | A random position at least 800 units from every other head and 300 from every enemy (best effort after 20 tries).                         |
+| `removeTrain(id, {drop?})`           | Removes a train; returns whether it existed. A living train's removal emits `trainLeft`; `drop` scatters half its carriages as pickups.   |
+| `setInput(id, input)`                | Sets any of `turn`, `boost`, `brake`, `fire`, `aimX`, `aimY` on a train. Unset fields and later ticks keep the last value.                |
+| `step()` → `SimEvent[]`              | Advances one fixed tick and returns that tick's events in order.                                                                          |
+| `addCarriage(trainId, kind)`         | Gives a train a carriage as if picked up. `false` at the carriage limit.                                                                  |
+| `spawnTrailer(x?, y?, kind?)`        | Places a trailer (random position and type when omitted).                                                                                 |
+| `spawnEnemy(kind?, x?, y?)`          | Places a `drone`, `hunter`, or `sentry`.                                                                                                  |
+| `spawnBoss()`                        | Spawns the boss now, or returns the living one.                                                                                           |
+| `spawnHeart(kind, x?, y?, dropped?)` | Places a `slow` or `full` heart (random position when omitted); a `dropped` one expires after 35 s.                                       |
+| `getTrain(id)`, `getEnemy(id)`       | Lookups by id.                                                                                                                            |
+| `state`                              | All mutable state as plain data (`trains`, `enemies`, `projectiles`, `trailers`, `drops`, timers, `tick`, `time`).                        |
+| `rng`, `dt`, `rules`, `options`      | The seeded random source, seconds per tick, shared geometry, and resolved options.                                                        |
+| `serializeWorld(world)`              | Stable string of the whole state including the random generator, for determinism checks and snapshots.                                    |
+| `botInput(world, trainId, rng)`      | The bot controller as a function returning a `TrainInput`.                                                                                |
 
 `WorldOptions`: `seed` (1), `tickRate` (30), `mapSize` (6000), `maxCarriages` (150, locomotive
 included), `carriageSpacing` (18), `maxTrailers` (60), `maxEnemies` (22), `initialTrailers` (50),
-`initialEnemies` (12), `boss` (true).
+`initialEnemies` (12), `boss` (true), `maxSlowHearts` (6), `maxFullHearts` (1).
 
 Trains, enemies, projectiles, and pickups share one id space, so an id identifies any entity.
 
 ### Controllers and input
 
-`TrainInput` is `{ turn: -1..1, boost, brake, aim: radians }`. Humans and bots produce exactly that.
+`TrainInput` is `{ turn: -1..1, boost, brake, fire, aimX, aimY }`, where the aim is a point given as
+an offset in world units from the head, so it moves with the train. A new train aims 200 units ahead
+along its heading. Humans and bots produce exactly that.
 A train with `controller: 'bot'` has `botInput` evaluated for it at the start of every `step()`;
 `controller: 'human'` trains only change when `setInput` is called. `setInput` ignores non-finite
 numbers and clamps `turn`, so network input can be passed straight in.
@@ -94,9 +97,10 @@ steering decision uses the shortest wrapped route.
 One rule set applies to every train, human or bot.
 
 - **Body collisions.** After all trains have moved, a head within 14 units (wrapped) of another
-  train's carriage at index 3 or beyond is destroyed, and the body's owner is credited (cause `ram`,
-  and the owner's `kills` goes up). The locomotive and the two carriages behind it (indices 0 to 2)
-  are never lethal, so heads pass through each other. All colliding pairs are found before any train
+  train's carriage at index 2 (`BODY_COLLISION_MIN_INDEX`) or beyond is destroyed, and the body's
+  owner is credited (cause `ram`, and the owner's `kills` goes up). The locomotive and the carriage
+  behind it (indices 0 and 1) are never lethal, so heads pass through each other and a starter train
+  has no lethal body. All colliding pairs are found before any train
   is destroyed, so a mutual ram destroys both, each credited to the other. A train is never harmed by
   its own carriages. The pass runs before projectiles, so a train destroyed by a ram takes no weapon
   credit that tick.
@@ -119,6 +123,21 @@ One rule set applies to every train, human or bot.
   and kills, then places it at a new safe position with protection and `spawnSeq + 1`. `spawnSeq` lets
   a client tell a respawn from movement. Id, name, colour, controller, and held controls survive.
 
+## Hearts
+
+Hearts are their own entities (`state.hearts`), separate from trailers and drops; they never become
+carriages. A living train collects any heart within its pickup radius (magnets help), whatever its
+hull.
+
+- **Slow hearts** (pink) give a healing dose: 15% of max hull over 8 s, on top of regeneration.
+  Doses stack, each adding its own rate (`TrainState.healDoses` holds their timers), up to 20; one
+  more replaces the dose with the least time left. Destruction clears them.
+- **Full hearts** (red) restore the hull to max at once.
+- **Sources.** The world keeps up to 6 slow and 1 full heart of its own, respawning one every 8 s
+  and 60 s while below those limits; they never expire. A destroyed enemy drops a full heart with
+  3% chance, otherwise a slow heart with 20% (one roll); the boss always drops a full heart. Dropped
+  hearts expire after 35 s. A round reset clears every heart and dose and refills the map's own.
+
 ## Events
 
 `step()` returns events in the order they happened. Events raised between steps (a train removed
@@ -135,9 +154,10 @@ units.
 | `pickup`               | `trainId`, `pickupId`, `carriage`, `source`, `added`             | A trailer or drop is collected; `added` is false at the cap.                                                    |
 | `bridgeOn`/`bridgeOff` | `trainId`                                                        | The head enters or leaves range of its own trail.                                                               |
 | `bossSpawn`            | `enemyId`, `name`                                                | The boss appears.                                                                                               |
-| `bossDown`             | `enemyId`, `name`, `sourceId`                                    | The boss is destroyed (it drops 5 pickups).                                                                     |
+| `bossDown`             | `enemyId`, `name`, `sourceId`                                    | The boss is destroyed (it drops 5 pickups and a full heart).                                                    |
 | `zap`                  | `ownerId`, `points`                                              | A tesla coil zaps: `points` is the coil, the first target, and the chained target if any; `x`, `y` is the coil. |
 | `mineExploded`         | `mineId`, `ownerId`                                              | A mine goes off, damaging everything but its owner in the blast.                                                |
+| `heart`                | `trainId`, `heartId`, `kind`, `amount`                           | A train collects a heart; `amount` is a slow heart's whole dose or the hull a full heart restored.              |
 
 `trainDestroyed.cause` is `ram` (head into another train's body; `killerTrainId` is the body's
 owner), `weapon` (`killerTrainId` is the projectile's owner), `enemy` or `boss` (`killerEnemyId`).
@@ -171,9 +191,9 @@ Deliberate changes made in the port:
 - **Swept projectile collisions** (at 30 Hz a 900 units/s laser moves 30 units per tick), and
   projectiles wrap around the map instead of despawning at the edge. All shots use a 14-unit train
   head radius (enemy shots used 12).
-- **Aim is one angle per train** (`input.aim`). The reference aimed each carriage separately at the
-  mouse (humans) or at its own nearest target (bots). The ±72° arc is still per carriage, measured
-  from that carriage's heading, and a hostile must still be within 550 units of it.
+- **Aim is one point per train** (`aimX`, `aimY`, an offset from the head). Each weapon carriage fires
+  along its own bearing to that point, so every gun converges on it; a carriage within 40 units of
+  the point uses the head's bearing instead. Bots aim the point at their target.
 - **Weapon cooldowns** tick down every tick (the reference froze them while no target was in
   range) and carry their remainder, so average fire rates match the reference's per-second rates.
 - **Exact hull regeneration.** 0.25 hull/s, the expectation of the reference's random 0.5 hull

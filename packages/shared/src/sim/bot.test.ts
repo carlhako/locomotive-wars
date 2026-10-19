@@ -83,7 +83,8 @@ describe('bot controller', () => {
     const input = botInput(world, bot.id, world.rng);
     expect(bot.ai.mode).toBe('attack');
     expect(input.boost).toBe(true);
-    expect(input.aim).toBeCloseTo(Math.PI / 2, 5);
+    expect(input.aimX).toBeCloseTo(0, 5);
+    expect(input.aimY).toBeCloseTo(200, 5);
   });
 
   it('aims at an enemy in range', () => {
@@ -97,7 +98,9 @@ describe('bot controller', () => {
       angle: 0,
     });
     world.spawnEnemy('sentry', 2800, 3000);
-    expect(Math.abs(botInput(world, bot.id, world.rng).aim)).toBeCloseTo(Math.PI, 5);
+    const input = botInput(world, bot.id, world.rng);
+    expect(input.aimX).toBeCloseTo(-200, 5);
+    expect(input.aimY).toBeCloseTo(0, 5);
   });
 
   it('fires at an enemy 300 units away', () => {
@@ -113,7 +116,9 @@ describe('bot controller', () => {
     world.spawnEnemy('drone', 3000, 3300);
     const input = botInput(world, bot.id, world.rng);
     expect(input.fire).toBe(true);
-    expect(input.aim).toBeCloseTo(Math.PI / 2, 5);
+    // The aim offset points from the head to the enemy.
+    expect(input.aimX).toBeCloseTo(0, 5);
+    expect(input.aimY).toBeCloseTo(300, 5);
   });
 
   it('holds fire with nothing in range', () => {
@@ -128,7 +133,11 @@ describe('bot controller', () => {
     });
     world.spawnEnemy('drone', 3000, 3600);
     world.addTrain({ protectedFor: 0, carriages: [], x: 3700, y: 3000, angle: 0 });
-    expect(botInput(world, bot.id, world.rng).fire).toBe(false);
+    const input = botInput(world, bot.id, world.rng);
+    expect(input.fire).toBe(false);
+    // With nothing to aim at, it aims ahead along its heading.
+    expect(input.aimX).toBeCloseTo(200);
+    expect(input.aimY).toBeCloseTo(0);
   });
 
   it('never fires at a protected train', () => {
@@ -165,7 +174,7 @@ describe('bot controller', () => {
     const world = emptyWorld();
     const bot = world.addTrain({ protectedFor: 0, carriages: [], controller: 'bot' });
     const input = botInput(world, bot.id, world.rng);
-    expect(Object.keys(input).sort()).toEqual(['aim', 'boost', 'brake', 'fire', 'turn']);
+    expect(Object.keys(input).sort()).toEqual(['aimX', 'aimY', 'boost', 'brake', 'fire', 'turn']);
     expect(Math.abs(input.turn)).toBeLessThanOrEqual(1);
   });
 

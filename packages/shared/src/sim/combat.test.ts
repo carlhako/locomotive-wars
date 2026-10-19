@@ -28,19 +28,60 @@ function inject(world: World, p: Projectile): void {
 }
 
 describe('weapon fire along aim', () => {
-  it("fires an MG along the aim angle at another train's head", () => {
+  it("fires an MG from its own position at another train's head", () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
-    world.addTrain({ protectedFor: 0, carriages: [], x: 1300, y: 1000, angle: Math.PI });
-    world.setInput(a.id, { aim: 0.1, fire: true });
+    world.addTrain({ protectedFor: 0, carriages: [], x: 1300, y: 1030, angle: Math.PI });
+    world.setInput(a.id, { aimX: 300, aimY: 30, fire: true });
     const events = world.step();
     const fired = ofType(events, 'fired');
     expect(fired).toHaveLength(1);
     expect(fired[0]).toMatchObject({ weapon: 'bullet', ownerKind: 'train', ownerId: a.id });
-    expect(fired[0]?.angle).toBeCloseTo(0.1);
+    // The MG sits behind the head, so its bearing to the aim point is shallower than the head's.
+    const mg = a.carriages[1]!;
+    const want = Math.atan2(a.y + 30 - mg.y, a.x + 300 - mg.x);
+    expect(fired[0]?.angle).toBeCloseTo(want);
+    expect(fired[0]?.angle).toBeLessThan(Math.atan2(30, 300));
     const p = world.state.projectiles.find((q) => q.ownerId === a.id);
     expect(p).toBeDefined();
-    expect(Math.atan2(p!.vy, p!.vx)).toBeCloseTo(0.1);
+    expect(Math.atan2(p!.vy, p!.vx)).toBeCloseTo(want);
+  });
+
+  it('converges every gun on the aim point', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      angle: 0,
+      carriages: ['mg', 'mg', 'mg'],
+    });
+    world.setInput(a.id, { aimX: 0, aimY: -200, fire: true });
+    const fired = ofType(world.step(), 'fired').filter((f) => f.ownerId === a.id);
+    expect(fired).toHaveLength(3);
+    const tx = a.x;
+    const ty = a.y - 200;
+    const angles = new Set<number>();
+    fired.forEach((f, k) => {
+      const c = a.carriages[k + 1]!;
+      expect(f.angle).toBeCloseTo(Math.atan2(ty - c.y, tx - c.x), 9);
+      // The shot's path from its muzzle passes through the aim point.
+      const cross = Math.cos(f.angle) * (ty - f.y) - Math.sin(f.angle) * (tx - f.x);
+      expect(Math.abs(cross)).toBeLessThan(1e-6);
+      angles.add(Math.round(f.angle * 1000));
+    });
+    expect(angles.size).toBe(3);
+  });
+
+  it('falls back to the head bearing when the aim point is on top of a carriage', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
+    // After this tick's move the head is at x=1006 and the MG at 970: aim 10 units above it.
+    world.setInput(a.id, { aimX: -36, aimY: -10, fire: true });
+    const fired = ofType(world.step(), 'fired').filter((f) => f.ownerId === a.id);
+    expect(a.carriages[1]!.x).toBeCloseTo(a.x - 36);
+    expect(fired).toHaveLength(1);
+    expect(fired[0]!.angle).toBeCloseTo(Math.atan2(-10, -36));
   });
 
   it('fires with no target in range', () => {
@@ -52,7 +93,7 @@ describe('weapon fire along aim', () => {
       angle: 0,
       carriages: ['mg', 'laser', 'missile'],
     });
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     const fired = ofType(world.step(), 'fired').filter((f) => f.ownerId === a.id);
     expect(fired.map((f) => f.weapon).sort()).toEqual(['bullet', 'laser', 'missile']);
   });
@@ -60,7 +101,7 @@ describe('weapon fire along aim', () => {
   it('fires behind the train', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
-    world.setInput(a.id, { aim: Math.PI, fire: true });
+    world.setInput(a.id, { aimX: -300, aimY: 0, fire: true });
     const fired = ofType(world.step(), 'fired');
     expect(fired).toHaveLength(1);
     expect(Math.cos(fired[0]!.angle)).toBeCloseTo(-1);
@@ -70,7 +111,7 @@ describe('weapon fire along aim', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
     world.spawnEnemy('sentry', 1200, 1000);
-    world.setInput(a.id, { aim: 0, fire: false });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: false });
     const events = run(world, 10);
     expect(ofType(events, 'fired').filter((f) => f.ownerId === a.id)).toHaveLength(0);
   });
@@ -78,7 +119,7 @@ describe('weapon fire along aim', () => {
   it('keeps firing on held fire with no new input', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     const events = run(world, 10);
     expect(ofType(events, 'fired').filter((f) => f.ownerId === a.id).length).toBeGreaterThan(1);
   });
@@ -86,7 +127,7 @@ describe('weapon fire along aim', () => {
   it('respects fire rate: about 7 MG shots per second', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['mg'] });
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     const shots = ofType(run(world, 30), 'fired').filter((f) => f.ownerId === a.id);
     expect(shots.length).toBeGreaterThanOrEqual(6);
     expect(shots.length).toBeLessThanOrEqual(8);
@@ -105,7 +146,7 @@ describe('flak', () => {
   it('fires 5 pellets spread evenly across ±15°', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['flak'] });
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     const fired = ofType(world.step(), 'fired').filter((f) => f.ownerId === a.id);
     expect(fired.map((f) => f.weapon)).toEqual(Array(5).fill('flak'));
     const deg = fired.map((f) => (f.angle * 180) / Math.PI);
@@ -116,7 +157,7 @@ describe('flak', () => {
   it('expires before a pellet has travelled 260 units', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['flak'] });
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     world.step();
     world.setInput(a.id, { fire: false });
     // 600 units/s is 20 units a tick: 240 units after 12 ticks, 260 after 13.
@@ -135,7 +176,7 @@ describe('flak', () => {
         shot({ id: 20000 + i, kind: 'bullet', x: 4000, y: 4000, life: 5, ownerId: a.id }),
       );
     }
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     const fired = ofType(world.step(), 'fired').filter((f) => f.weapon === 'flak');
     expect(fired).toHaveLength(2);
   });
@@ -314,7 +355,7 @@ describe('weapon projectile budget', () => {
       angle: 0,
       carriages: Array.from({ length: 40 }, () => 'mg' as const),
     });
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     return a;
   }
   const liveOf = (world: World, id: number) =>
@@ -357,7 +398,7 @@ describe('weapon projectile budget', () => {
         shot({ id: 20000 + i, kind: 'drone', x: 4000, y: 4000, life: 5, ownerId: a.id }),
       );
     }
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     expect(ofType(world.step(), 'fired').filter((f) => f.weapon === 'bullet')).toHaveLength(1);
   });
 });
@@ -452,7 +493,7 @@ describe('projectile hits', () => {
   it('fires the laser about twice a second', () => {
     const world = emptyWorld();
     const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['laser'] });
-    world.setInput(a.id, { aim: 0, fire: true });
+    world.setInput(a.id, { aimX: 1000, aimY: 0, fire: true });
     const shots = ofType(run(world, 90), 'fired').filter((f) => f.ownerId === a.id);
     expect(shots.length).toBeGreaterThanOrEqual(5);
     expect(shots.length).toBeLessThanOrEqual(7);

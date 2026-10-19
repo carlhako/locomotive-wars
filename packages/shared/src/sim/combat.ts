@@ -1,4 +1,5 @@
 import {
+  AIM_CLOSE_RANGE,
   BOSS_DROP_JITTER,
   BOSS_DROPS,
   BODY_COLLISION_MIN_INDEX,
@@ -15,12 +16,14 @@ import {
   DRONE_RANGE,
   ENEMY_DROP_JITTER,
   ENEMY_HIT_RADIUS,
+  FULL_HEART_DROP_CHANCE,
   HEAD_RADIUS,
   MAX_TRAIN_PROJECTILES,
   PROJECTILE_LIFE,
   RAM_DAMAGE_TO_ENEMY,
   RAM_DAMAGE_TO_TRAIN,
   RAM_RADIUS,
+  SLOW_HEART_DROP_CHANCE,
   SPLASH_DAMAGE_FACTOR,
   TAILGUN,
   TAILGUN_ARC,
@@ -164,6 +167,7 @@ export function destroyTrain(
   train.alive = false;
   train.hull = 0;
   train.boosting = false;
+  train.healDoses = [];
   if (train.bridgeActive) {
     train.bridgeActive = false;
     world.emit({ type: 'bridgeOff', trainId: train.id, x: train.x, y: train.y });
@@ -188,7 +192,8 @@ export function destroyTrain(
 
 /**
  * Applies damage to an enemy and emits a hit event. Destroyed enemies stay in the list (with
- * zero hull) until the end of the tick, and drop pickups.
+ * zero hull) until the end of the tick, and drop pickups: one and maybe a heart for a regular
+ * enemy, five and a full heart for the boss.
  */
 export function damageEnemy(
   world: World,
@@ -218,6 +223,7 @@ export function damageEnemy(
       const jy = world.rng.range(-BOSS_DROP_JITTER, BOSS_DROP_JITTER);
       world.spawnDrop(enemy.x + jx, enemy.y + jy);
     }
+    world.spawnHeart('full', enemy.x, enemy.y, true);
     world.state.bossId = null;
     world.emit({
       type: 'bossDown',
@@ -232,6 +238,12 @@ export function damageEnemy(
   const jx = world.rng.range(-ENEMY_DROP_JITTER, ENEMY_DROP_JITTER);
   const jy = world.rng.range(-ENEMY_DROP_JITTER, ENEMY_DROP_JITTER);
   world.spawnDrop(enemy.x + jx, enemy.y + jy);
+  // One roll, so an enemy never drops both kinds.
+  const roll = world.rng.next();
+  if (roll < FULL_HEART_DROP_CHANCE) world.spawnHeart('full', enemy.x, enemy.y, true);
+  else if (roll < FULL_HEART_DROP_CHANCE + SLOW_HEART_DROP_CHANCE) {
+    world.spawnHeart('slow', enemy.x, enemy.y, true);
+  }
   world.emit({
     type: 'enemyDestroyed',
     enemyId: enemy.id,
@@ -315,8 +327,25 @@ export function countWeaponProjectiles(world: World): Map<number, number> {
 }
 
 /**
- * Fires each ready weapon carriage along the train's aim angle while the fire input is on,
- * whatever the carriage's heading and whether or not anything is in range, and each ready auto
+ * The bearing a weapon carriage fires along: from the carriage to the train's aim point (the head
+ * plus the aim offset), or the head's bearing to it when the carriage is within
+ * `AIM_CLOSE_RANGE` of the point, so guns under the cursor do not spin.
+ */
+export function carriageBearing(world: World, train: TrainState, c: Carriage): number {
+  const size = world.rules.size;
+  const { aimX, aimY } = train.input;
+  const tx = wrapPos(train.x + aimX, size);
+  const ty = wrapPos(train.y + aimY, size);
+  if (wrapDist(c.x, c.y, tx, ty, size) < AIM_CLOSE_RANGE) {
+    return aimX === 0 && aimY === 0 ? train.angle : Math.atan2(aimY, aimX);
+  }
+  return wrapAngle(c.x, c.y, tx, ty, size);
+}
+
+/**
+ * Fires each ready weapon carriage at the train's aim point while the fire input is on (see
+ * `carriageBearing`), whatever the carriage's heading and whether or not anything is in range,
+ * and each ready auto
  * weapon (tail gunner, tesla coil) at whatever it finds, fire input or not. Cooldowns tick down
  * every tick. A protected train holds fire, and a train with `MAX_TRAIN_PROJECTILES` of its
  * shots in flight waits. `live` holds those counts (see `countWeaponProjectiles`) and is
@@ -325,7 +354,6 @@ export function countWeaponProjectiles(world: World): Map<number, number> {
 export function fireWeapons(world: World, train: TrainState, live: Map<number, number>): void {
   const dt = world.dt;
   const holding = train.protectedFor > 0 || !train.input.fire;
-  const aim = train.input.aim;
   for (let i = 0; i < train.carriages.length; i++) {
     const c = train.carriages[i];
     if (!c || (!isWeapon(c.kind) && c.kind !== 'tailgun' && c.kind !== 'tesla')) continue;
@@ -339,7 +367,7 @@ export function fireWeapons(world: World, train: TrainState, live: Map<number, n
       if (zapTesla(world, train, c)) train.fireTimers[i] = timer + TESLA_COOLDOWN;
     } else if (isWeapon(c.kind) && !holding) {
       const stats = WEAPONS[c.kind];
-      if (fireVolley(world, train, c, stats, aim, live) > 0) {
+      if (fireVolley(world, train, c, stats, carriageBearing(world, train, c), live) > 0) {
         train.fireTimers[i] = timer + 1 / stats.fireRate;
       }
     }
@@ -395,8 +423,8 @@ function zapTesla(world: World, train: TrainState, c: Carriage): boolean {
 }
 
 /**
- * Fires one shot of a weapon from a carriage along `aim`: its pellets spread evenly across
- * aim ± spread. Each pellet counts toward the train's projectile budget, so a volley that reaches
+ * Fires one shot of a weapon from a carriage along `aim`, with the muzzle offset that way too:
+ * its pellets spread evenly across aim ± spread. Each pellet counts toward the train's projectile budget, so a volley that reaches
  * the budget part-way is cut short. Returns the number of projectiles fired.
  */
 function fireVolley(
@@ -585,7 +613,7 @@ export function ramEnemies(world: World): void {
 
 /**
  * Head-vs-body collisions between every pair of trains. A head within 14 units of another
- * train's carriage at index 3 or beyond is destroyed, crediting the body's owner. All pairs are
+ * train's carriage at index 2 (`BODY_COLLISION_MIN_INDEX`) or beyond is destroyed, crediting the body's owner. All pairs are
  * found before any train is destroyed, so a mutual ram destroys both whatever the iteration
  * order, and a train destroyed here still earns credit for the body that got hit. Protected
  * trains neither die nor kill.

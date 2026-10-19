@@ -26,7 +26,8 @@ canvas {
 }
 body:not(.playing) #ui,
 body:not(.playing) #mute-btn,
-body:not(.playing) #damage-flash {
+body:not(.playing) #damage-flash,
+body:not(.playing) #heal-flash {
   display: none;
 }
 .panel {
@@ -368,6 +369,37 @@ body:not(.playing) #damage-flash {
 }
 #damage-flash.show {
   opacity: 1;
+}
+#heal-flash {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 30%, rgba(68, 255, 119, 0.35) 100%);
+  opacity: 0;
+  transition: opacity 0.25s;
+  z-index: 5;
+}
+#heal-flash.show {
+  opacity: 1;
+}
+#heal-doses {
+  display: none;
+  margin-left: 6px;
+  color: #ff7ab8;
+  font-weight: bold;
+  text-shadow: 0 0 6px rgba(255, 122, 184, 0.8);
+  animation: heal-pulse 1s ease-in-out infinite;
+}
+#heal-doses.show {
+  display: inline;
+}
+@keyframes heal-pulse {
+  50% {
+    opacity: 0.6;
+  }
 }
 #killfeed {
   position: absolute;

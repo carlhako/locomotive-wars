@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionForKey, aimAngle, InputState, isTypingTarget } from './input.ts';
+import { actionForKey, aimOffset, InputState, isTypingTarget } from './input.ts';
 
 describe('key mapping', () => {
   it('maps A/D and the left/right arrows to turning', () => {
@@ -63,23 +63,25 @@ describe('InputState', () => {
     expect(input.toTrainInput(head, 0)).toMatchObject({ boost: false, brake: false });
   });
 
-  it('aims at -π/2 with the mouse directly above the head', () => {
+  it('aims at (0, -150) with the mouse 150 pixels directly above the head', () => {
     const input = new InputState();
-    input.mouseMove(400, 100);
-    expect(input.toTrainInput({ x: 400, y: 300 }, 1.23).aim).toBeCloseTo(-Math.PI / 2);
+    input.mouseMove(400, 150);
+    expect(input.toTrainInput({ x: 400, y: 300 }, 1.23)).toMatchObject({ aimX: 0, aimY: -150 });
   });
 
   it('measures aim from the head, not the screen centre', () => {
     const input = new InputState();
     input.mouseMove(500, 300);
-    // Head sits left of the mouse: aim is straight right. Head below-left: aim points up-right.
-    expect(input.toTrainInput({ x: 400, y: 300 }, 0).aim).toBeCloseTo(0);
-    expect(input.toTrainInput({ x: 400, y: 400 }, 0).aim).toBeCloseTo(-Math.PI / 4);
+    expect(input.toTrainInput({ x: 400, y: 300 }, 0)).toMatchObject({ aimX: 100, aimY: 0 });
+    expect(input.toTrainInput({ x: 400, y: 400 }, 0)).toMatchObject({ aimX: 100, aimY: -100 });
+    expect(aimOffset(10, 20, 30, 50)).toEqual({ aimX: -20, aimY: -30 });
   });
 
-  it('falls back to the given aim until the mouse moves', () => {
+  it('aims ahead along the heading until the mouse moves', () => {
     const input = new InputState();
-    expect(input.toTrainInput({ x: 0, y: 0 }, 2.5).aim).toBe(2.5);
+    const { aimX, aimY } = input.toTrainInput({ x: 0, y: 0 }, Math.PI / 2);
+    expect(aimX).toBeCloseTo(0);
+    expect(aimY).toBeCloseTo(200);
   });
 
   it('releases held keys', () => {
@@ -184,15 +186,6 @@ describe('fire capture', () => {
     input.fireDown();
     input.releaseAll();
     expect(input.firing).toBe(false);
-  });
-});
-
-describe('aimAngle', () => {
-  it('points right, down, left, and up', () => {
-    expect(aimAngle(10, 0, 0, 0)).toBeCloseTo(0);
-    expect(aimAngle(0, 10, 0, 0)).toBeCloseTo(Math.PI / 2);
-    expect(aimAngle(-10, 0, 0, 0)).toBeCloseTo(Math.PI);
-    expect(aimAngle(0, -10, 0, 0)).toBeCloseTo(-Math.PI / 2);
   });
 });
 

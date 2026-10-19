@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { PICKUP_KINDS, WEAPONS } from '@lw/shared';
-import { CARRIAGE_TYPES, carriageColors, fmt, isWeaponCarriage, shade } from './palette.ts';
+import {
+  CARRIAGE_TYPES,
+  carriageColors,
+  fmt,
+  HEAL_COLOR,
+  HEART_COLORS,
+  isWeaponCarriage,
+  shade,
+} from './palette.ts';
 
 const rows = Object.entries(CARRIAGE_TYPES);
 
@@ -83,6 +91,16 @@ describe('descriptions', () => {
     expect(fmt(0.9)).toBe('0.9');
     expect(fmt(15.000000000000002)).toBe('15');
     expect(fmt(3.456)).toBe('3.5');
+  });
+});
+
+describe('heart colours', () => {
+  it('gives each heart kind and healing its own colour, apart from every carriage type', () => {
+    const hearts = [HEART_COLORS.slow, HEART_COLORS.full, HEAL_COLOR];
+    for (const c of hearts) expect(c).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(new Set(hearts).size).toBe(3);
+    const carriages = new Set(rows.map(([, t]) => t.color.toLowerCase()));
+    for (const c of hearts) expect(carriages.has(c.toLowerCase())).toBe(false);
   });
 });
 

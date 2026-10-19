@@ -39,6 +39,8 @@ function view(t: TrainView, time = 0): WorldView {
     drops: [],
     projectiles: [],
     mines: [],
+    hearts: [],
+    localDoses: 0,
     minimap: [{ id: t.id, x: t.x, y: t.y, color: t.color, isLocal: true }],
   };
 }

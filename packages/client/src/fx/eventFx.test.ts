@@ -4,16 +4,18 @@ import type { ProjectileKind, SimEvent } from '@lw/shared';
 import type { SoundPlayer } from '../audio/sound.ts';
 import type { BannerSink } from '../hud/banner.ts';
 import type { KillFeedEntry } from '../hud/killfeed.ts';
+import { HEAL_COLOR } from '../render/palette.ts';
 import { applyEvents, NameBook } from './eventFx.ts';
 import type { FxContext, FxTargets } from './eventFx.ts';
 import type { Particle } from './particles.ts';
 
 interface Recorded {
   particles: Particle[];
-  numbers: { x: number; y: number; amount: number; color?: string }[];
+  numbers: { x: number; y: number; amount: number; color?: string; prefix?: string }[];
   shakes: { intensity: number; duration: number }[];
   flashes: { id: number; duration: number }[];
   screenFlashes: number;
+  healFlashes: number;
   feed: KillFeedEntry[];
   banners: { text: string; sub: string; color: string }[];
   popups: { text: string; color: string }[];
@@ -29,6 +31,7 @@ function recorder(): { fx: FxTargets; rec: Recorded } {
     shakes: [],
     flashes: [],
     screenFlashes: 0,
+    healFlashes: 0,
     feed: [],
     banners: [],
     popups: [],
@@ -48,6 +51,8 @@ function recorder(): { fx: FxTargets; rec: Recorded } {
     bridgeOff: () => rec.sounds.push('bridgeOff'),
     zap: () => rec.sounds.push('zap'),
     mine: () => rec.sounds.push('mine'),
+    slowHeal: () => rec.sounds.push('slowHeal'),
+    fullHeal: () => rec.sounds.push('fullHeal'),
   };
   const banner: BannerSink = {
     show: (text, sub, color) => rec.banners.push({ text, sub, color }),
@@ -55,12 +60,20 @@ function recorder(): { fx: FxTargets; rec: Recorded } {
   };
   const fx: FxTargets = {
     particles: { emit: (p) => rec.particles.push(p) },
-    damageNumbers: { add: (x, y, amount, color) => rec.numbers.push({ x, y, amount, color }) },
+    damageNumbers: {
+      add: (x, y, amount, color, prefix) =>
+        rec.numbers.push(prefix ? { x, y, amount, color, prefix } : { x, y, amount, color }),
+    },
     shake: { add: (intensity, duration) => rec.shakes.push({ intensity, duration }) },
     hitFlash: { add: (id, duration) => rec.flashes.push({ id, duration }) },
     screenFlash: {
       show: () => {
         rec.screenFlashes += 1;
+      },
+    },
+    healFlash: {
+      show: () => {
+        rec.healFlashes += 1;
       },
     },
     killFeed: { add: (e) => rec.feed.push(e) },
@@ -497,5 +510,57 @@ describe('applyEvents', () => {
     );
 
     expect(rec.sounds).toEqual(['bridgeOn', 'pickup']);
+  });
+
+  it('shows heart particles, a green +250, a green flash, and the full-heal sound', () => {
+    const { me, ctx } = scene();
+    const { fx, rec } = recorder();
+    const heart: SimEvent = {
+      type: 'heart',
+      trainId: me.id,
+      heartId: 77,
+      kind: 'full',
+      amount: 250,
+      x: 1010,
+      y: 1004,
+    };
+
+    applyEvents([heart], ctx, fx);
+
+    expect(rec.particles.length).toBeGreaterThan(0);
+    expect(rec.particles.every((p) => p.type === 'heart')).toBe(true);
+    expect(rec.numbers).toEqual([
+      { x: 1010, y: 1004, amount: 250, color: HEAL_COLOR, prefix: '+' },
+    ]);
+    expect(rec.healFlashes).toBe(1);
+    expect(rec.screenFlashes).toBe(0);
+    expect(rec.sounds).toEqual(['fullHeal']);
+  });
+
+  it('plays the slow-heal sound without a flash for a slow heart', () => {
+    const { me, ctx } = scene();
+    const { fx, rec } = recorder();
+    applyEvents(
+      [{ type: 'heart', trainId: me.id, heartId: 78, kind: 'slow', amount: 60, x: 1, y: 2 }],
+      ctx,
+      fx,
+    );
+    expect(rec.numbers[0]).toMatchObject({ amount: 60, prefix: '+' });
+    expect(rec.healFlashes).toBe(0);
+    expect(rec.sounds).toEqual(['slowHeal']);
+  });
+
+  it("shows another train's heart without a flash or sound", () => {
+    const { rival, ctx } = scene();
+    const { fx, rec } = recorder();
+    applyEvents(
+      [{ type: 'heart', trainId: rival.id, heartId: 79, kind: 'full', amount: 0, x: 1, y: 2 }],
+      ctx,
+      fx,
+    );
+    expect(rec.particles.length).toBeGreaterThan(0);
+    expect(rec.numbers).toEqual([]);
+    expect(rec.healFlashes).toBe(0);
+    expect(rec.sounds).toEqual([]);
   });
 });

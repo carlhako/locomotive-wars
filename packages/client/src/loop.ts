@@ -74,12 +74,14 @@ export class Game {
   private readonly killFeedView: KillFeedView;
   private readonly banner: Banner;
   private readonly damageFlash: DamageFlash;
+  private readonly healFlash: DamageFlash;
   private readonly fx: FxTargets;
 
   private lastTime = 0;
   private lastGeneration = -1;
   private lastSpawnSeq = -1;
-  private aim: number | null = null;
+  /** The local turrets' aim point in world coordinates, or null before the mouse moves. */
+  private aim: { x: number; y: number } | null = null;
 
   constructor(private readonly source: GameSource) {
     const minimap = el('minimap') as HTMLCanvasElement;
@@ -94,12 +96,14 @@ export class Game {
     this.killFeedView = new KillFeedView(el('killfeed'), this.killFeed);
     this.banner = new Banner(el('banner'), el('combo'));
     this.damageFlash = new DamageFlash(el('damage-flash'));
+    this.healFlash = new DamageFlash(el('heal-flash'));
     this.fx = {
       particles: this.particles,
       damageNumbers: this.damageNumbers,
       shake: this.shake,
       hitFlash: this.hitFlash,
       screenFlash: this.damageFlash,
+      healFlash: this.healFlash,
       killFeed: this.killFeed,
       banner: this.banner,
       sound: this.sound,
@@ -144,7 +148,6 @@ export class Game {
       ? { x: screenX(env, localBefore.x), y: screenY(env, localBefore.y) }
       : { x: width / 2, y: height / 2 };
     const trainInput = this.input.toTrainInput(headScreen, localBefore?.angle ?? 0);
-    this.aim = this.input.mouse ? trainInput.aim : null;
 
     const events = this.source.advance(dt, trainInput);
     const view = this.source.view();
@@ -170,6 +173,12 @@ export class Game {
       followCamera(this.camera, local.x, local.y, size, dt, respawned);
     }
 
+    // The camera draws one unit per pixel, so the drawn head plus the offset is under the mouse.
+    this.aim =
+      this.input.mouse && local
+        ? { x: local.x + trainInput.aimX, y: local.y + trainInput.aimY }
+        : null;
+
     this.emitter.update(this.particles, view.trains, dt, (x, y) =>
       onScreen(env, screenX(env, x), screenY(env, y), 150),
     );
@@ -183,6 +192,7 @@ export class Game {
     this.killFeed.update(dt);
     this.banner.update(dt);
     this.damageFlash.update(dt);
+    this.healFlash.update(dt);
 
     this.surface.begin();
     renderScene(
