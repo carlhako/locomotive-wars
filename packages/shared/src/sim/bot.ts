@@ -10,6 +10,7 @@ import {
   BOT_WANDER_MARGIN,
   WEAPON_RANGE,
 } from './constants.ts';
+import { nearestHostile } from './combat.ts';
 import { clamp, shortAngle, wrapAngle, wrapDelta, wrapDist } from './math.ts';
 import type { Rng } from './rng.ts';
 import type { TrainInput, TrainState } from './types.ts';
@@ -113,31 +114,7 @@ function decide(world: World, train: TrainState, rng: Rng): void {
  * range, firing; otherwise straight ahead, holding fire.
  */
 function aimAt(world: World, train: TrainState): { aim: number; fire: boolean } {
-  const size = world.rules.size;
-  let bestDist = WEAPON_RANGE;
-  let bx = 0;
-  let by = 0;
-  let found = false;
-  for (const e of world.state.enemies) {
-    if (e.hull <= 0) continue;
-    const d = wrapDist(train.x, train.y, e.x, e.y, size);
-    if (d < bestDist) {
-      bestDist = d;
-      bx = e.x;
-      by = e.y;
-      found = true;
-    }
-  }
-  for (const t of world.state.trains) {
-    if (t === train || !t.alive || t.protectedFor > 0) continue;
-    const d = wrapDist(train.x, train.y, t.x, t.y, size);
-    if (d < bestDist) {
-      bestDist = d;
-      bx = t.x;
-      by = t.y;
-      found = true;
-    }
-  }
-  if (!found) return { aim: train.angle, fire: false };
-  return { aim: wrapAngle(train.x, train.y, bx, by, size), fire: true };
+  const target = nearestHostile(world, train, train.x, train.y, WEAPON_RANGE);
+  if (!target) return { aim: train.angle, fire: false };
+  return { aim: wrapAngle(train.x, train.y, target.x, target.y, world.rules.size), fire: true };
 }

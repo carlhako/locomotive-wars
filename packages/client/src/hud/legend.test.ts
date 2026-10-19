@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CarriageKind, PickupKind } from '@lw/shared';
 import { PICKUP_KINDS } from '@lw/shared';
-import { CARRIAGE_TYPES, CATEGORY_ORDER } from '../render/palette.ts';
+import { CARRIAGE_TYPES, CATEGORY_LABELS, CATEGORY_ORDER } from '../render/palette.ts';
 import type { KeyValueStorage } from '../ui/join.ts';
 import { countKinds, initialCollapsed, Legend, LEGEND_KEY, LEGEND_ORDER } from './legend.ts';
 import type { LegendView } from './legend.ts';
@@ -52,6 +52,30 @@ describe('legend order', () => {
     expect([...LEGEND_ORDER].sort()).toEqual([...PICKUP_KINDS].sort());
     const cats = LEGEND_ORDER.map((k) => CATEGORY_ORDER.indexOf(CARRIAGE_TYPES[k].category));
     expect(cats).toEqual([...cats].sort((a, b) => a - b));
+  });
+});
+
+describe('legend sections', () => {
+  it('lists the whole roster under its headings', () => {
+    const byCategory = (cat: string) =>
+      LEGEND_ORDER.filter((k) => CARRIAGE_TYPES[k].category === cat).map(
+        (k) => CARRIAGE_TYPES[k].label,
+      );
+    expect(LEGEND_ORDER).toHaveLength(16);
+    expect(CATEGORY_LABELS.auto).toBe('Auto weapons');
+    expect(CATEGORY_ORDER.indexOf('auto')).toBe(CATEGORY_ORDER.indexOf('weapon') + 1);
+    expect(byCategory('weapon')).toEqual(['MG Turret', 'Missile', 'Laser', 'Flak']);
+    expect(byCategory('auto')).toEqual(['Mine Layer', 'Tail Gunner', 'Tesla Coil']);
+    expect(byCategory('defence')).toContain('Cowcatcher');
+    expect(byCategory('support')).toEqual(expect.arrayContaining(['Repair Car', 'Cloak']));
+  });
+
+  it('counts the new types like any other', () => {
+    const view = new FakeView();
+    new Legend(view, memory()).render(train('mines', 'tesla', 'tesla', 'cloak'));
+    expect(view.counts.get('mines')).toBe(1);
+    expect(view.counts.get('tesla')).toBe(2);
+    expect(view.counts.get('cloak')).toBe(1);
   });
 });
 

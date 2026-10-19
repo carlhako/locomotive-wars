@@ -95,13 +95,14 @@ Starts an in-process server with 10 bots, connects 16 bot-driven WebSocket clien
 and checks that the world ran 1800 ticks (within 1%) and that the 95th-percentile per-client
 downstream rate stayed at or under 100 KB/s. It exits non-zero if either fails. Environment:
 
-| Variable        | Default | Meaning                                                         |
-| --------------- | ------- | --------------------------------------------------------------- |
-| `SOAK_SECONDS`  | `60`    | Measurement length                                              |
-| `SOAK_CLIENTS`  | `16`    | Simulated players (a destroyed one rejoins with a fresh train)  |
-| `SOAK_BOTS`     | `10`    | Server bots (in-process server only)                            |
-| `SOAK_COMPRESS` | unset   | `1` turns on `permessage-deflate` (in-process server only)      |
-| `SOAK_URL`      | unset   | Test an already-running server, such as `http://localhost:8080` |
+| Variable         | Default | Meaning                                                                           |
+| ---------------- | ------- | --------------------------------------------------------------------------------- |
+| `SOAK_SECONDS`   | `60`    | Measurement length                                                                |
+| `SOAK_CLIENTS`   | `16`    | Simulated players (a destroyed one rejoins with a fresh train)                    |
+| `SOAK_BOTS`      | `10`    | Server bots (in-process server only)                                              |
+| `SOAK_COMPRESS`  | unset   | `1` turns on `permessage-deflate` (in-process server only)                        |
+| `SOAK_CARRIAGES` | unset   | Comma-separated kinds added to every train at each spawn (in-process server only) |
+| `SOAK_URL`       | unset   | Test an already-running server, such as `http://localhost:8080`                   |
 
 ## Tests
 

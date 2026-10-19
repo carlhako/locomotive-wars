@@ -2,6 +2,7 @@ import { wrapDist } from '@lw/shared';
 import type {
   CarriageKind,
   EnemyState,
+  Mine,
   Pickup,
   Projectile,
   SimEvent,
@@ -18,6 +19,7 @@ export interface Visible {
   trailers: Pickup[];
   drops: Pickup[];
   projectiles: Projectile[];
+  mines: Mine[];
 }
 
 /** True when the train's head, or any carriage, is within `radius` of (cx, cy). */
@@ -52,6 +54,7 @@ export function selectVisible(
     trailers: s.trailers.filter((p) => near(p.x, p.y)),
     drops: s.drops.filter((p) => near(p.x, p.y)),
     projectiles: s.projectiles.filter((p) => near(p.x, p.y)),
+    mines: s.mines.filter((m) => near(m.x, m.y)),
   };
 }
 
@@ -75,6 +78,9 @@ export function eventInvolves(e: SimEvent, trainId: number): boolean {
     case 'bridgeOff':
     case 'trainLeft':
       return e.trainId === trainId;
+    case 'zap':
+    case 'mineExploded':
+      return e.ownerId === trainId;
     case 'bossSpawn':
       return false;
   }

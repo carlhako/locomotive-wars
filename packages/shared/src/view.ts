@@ -1,3 +1,4 @@
+import { MINE_ARM_TIME } from './sim/constants.ts';
 import { fuelCapacityOf } from './sim/train.ts';
 import type {
   CarriageKind,
@@ -92,6 +93,15 @@ export interface ProjectileView {
   vy: number;
 }
 
+export interface MineView {
+  id: number;
+  /** The train that laid it. */
+  ownerId: number;
+  x: number;
+  y: number;
+  armed: boolean;
+}
+
 export interface MinimapEntry {
   id: number;
   x: number;
@@ -111,6 +121,7 @@ export interface WorldView {
   trailers: TrailerView[];
   drops: DropView[];
   projectiles: ProjectileView[];
+  mines: MineView[];
   /** One entry per living train. */
   minimap: MinimapEntry[];
 }
@@ -169,6 +180,13 @@ export function viewFromWorld(world: World, localId: number): WorldView {
       y: p.y,
       vx: p.vx,
       vy: p.vy,
+    })),
+    mines: s.mines.map((m) => ({
+      id: m.id,
+      ownerId: m.ownerId,
+      x: m.x,
+      y: m.y,
+      armed: m.age >= MINE_ARM_TIME,
     })),
     minimap: s.trains
       .filter((t) => t.alive)

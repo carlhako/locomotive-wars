@@ -93,6 +93,8 @@ describe('OfflineSession', () => {
       splash: 0,
       ownerKind: 'enemy',
       ownerId: 900002,
+      pierce: 1,
+      hitIds: [],
     });
 
     const events = session.advance(world.dt, IDLE);

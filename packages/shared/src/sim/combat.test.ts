@@ -15,6 +15,8 @@ function shot(over: Partial<Projectile>): Projectile {
     damage: 14,
     life: 1,
     splash: 0,
+    pierce: 1,
+    hitIds: [],
     ownerKind: 'train',
     ownerId: 9999,
     ...over,
@@ -96,6 +98,210 @@ describe('weapon fire along aim', () => {
     world.spawnEnemy('sentry', 1150, 1000);
     const events = run(world, 3);
     expect(ofType(events, 'fired').some((f) => f.weapon === 'drone')).toBe(true);
+  });
+});
+
+describe('flak', () => {
+  it('fires 5 pellets spread evenly across ±15°', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['flak'] });
+    world.setInput(a.id, { aim: 0, fire: true });
+    const fired = ofType(world.step(), 'fired').filter((f) => f.ownerId === a.id);
+    expect(fired.map((f) => f.weapon)).toEqual(Array(5).fill('flak'));
+    const deg = fired.map((f) => (f.angle * 180) / Math.PI);
+    [-15, -7.5, 0, 7.5, 15].forEach((want, i) => expect(deg[i]).toBeCloseTo(want, 6));
+    expect(world.state.projectiles.filter((p) => p.ownerId === a.id)).toHaveLength(5);
+  });
+
+  it('expires before a pellet has travelled 260 units', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['flak'] });
+    world.setInput(a.id, { aim: 0, fire: true });
+    world.step();
+    world.setInput(a.id, { fire: false });
+    // 600 units/s is 20 units a tick: 240 units after 12 ticks, 260 after 13.
+    run(world, 11);
+    expect(world.state.projectiles.filter((p) => p.kind === 'flak')).toHaveLength(5);
+    world.step();
+    expect(world.state.projectiles.filter((p) => p.kind === 'flak')).toHaveLength(0);
+  });
+
+  it('cuts a volley short at the projectile budget', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['flak'] });
+    for (let i = 0; i < MAX_TRAIN_PROJECTILES - 2; i++) {
+      inject(
+        world,
+        shot({ id: 20000 + i, kind: 'bullet', x: 4000, y: 4000, life: 5, ownerId: a.id }),
+      );
+    }
+    world.setInput(a.id, { aim: 0, fire: true });
+    const fired = ofType(world.step(), 'fired').filter((f) => f.weapon === 'flak');
+    expect(fired).toHaveLength(2);
+  });
+});
+
+describe('tail gunner', () => {
+  // Both trains head east at the same speed, so the gap holds while they move.
+  function pair(otherX: number, protectedFor = 0) {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor, x: 2000, y: 2000, angle: 0, carriages: ['tailgun'] });
+    const gun = a.carriages[1]!;
+    const b = world.addTrain({
+      protectedFor: 0,
+      x: gun.x + otherX,
+      y: 2000,
+      angle: 0,
+      carriages: [],
+    });
+    return { world, a, b };
+  }
+
+  it('fires at a chaser behind it without fire input', () => {
+    const { world, a } = pair(-300);
+    expect(a.input.fire).toBe(false);
+    const fired = ofType(world.step(), 'fired').filter((f) => f.ownerId === a.id);
+    expect(fired).toHaveLength(1);
+    expect(fired[0]).toMatchObject({ weapon: 'bullet', carriage: 1 });
+    expect(Math.cos(fired[0]!.angle)).toBeCloseTo(-1, 3);
+  });
+
+  it('fires about 3 shots a second', () => {
+    const { world, a } = pair(-300);
+    const fired = ofType(run(world, 30), 'fired').filter((f) => f.ownerId === a.id);
+    expect(fired.length).toBeGreaterThanOrEqual(2);
+    expect(fired.length).toBeLessThanOrEqual(4);
+  });
+
+  it('ignores a target ahead of it', () => {
+    const { world, a } = pair(300);
+    const fired = ofType(run(world, 30), 'fired').filter((f) => f.ownerId === a.id);
+    expect(fired).toHaveLength(0);
+  });
+
+  it('holds during spawn protection', () => {
+    const { world, a } = pair(-300, 5);
+    expect(ofType(run(world, 30), 'fired').filter((f) => f.ownerId === a.id)).toHaveLength(0);
+  });
+
+  it('counts toward the projectile budget', () => {
+    const { world, a } = pair(-300);
+    for (let i = 0; i < MAX_TRAIN_PROJECTILES; i++) {
+      inject(
+        world,
+        shot({ id: 20000 + i, kind: 'bullet', x: 4000, y: 4000, life: 5, ownerId: a.id }),
+      );
+    }
+    expect(ofType(world.step(), 'fired').filter((f) => f.ownerId === a.id)).toHaveLength(0);
+  });
+});
+
+describe('tesla coil', () => {
+  /** A train heading east with one tesla coil; `coil` is where the coil is after one tick. */
+  function coilTrain(protectedFor = 0) {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor, x: 2000, y: 2000, angle: 0, carriages: ['tesla'] });
+    const c = a.carriages[1]!;
+    return { world, a, coil: { x: c.x + 6, y: c.y } };
+  }
+
+  it('zaps the nearest hostile and chains to the next', () => {
+    const { world, a, coil } = coilTrain();
+    const near = world.spawnEnemy('drone', coil.x, coil.y + 150);
+    const far = world.spawnEnemy('drone', coil.x, coil.y + 250);
+    near.speed = far.speed = 0;
+    const events = world.step();
+    expect(near.hull).toBe(25 - 18);
+    expect(far.hull).toBe(25 - 18);
+    expect(world.state.projectiles.filter((p) => p.ownerId === a.id)).toHaveLength(0);
+    const zap = ofType(events, 'zap');
+    expect(zap).toHaveLength(1);
+    expect(zap[0]!.ownerId).toBe(a.id);
+    expect(zap[0]!.points).toHaveLength(3);
+    expect(zap[0]!.points[1]).toEqual([near.x, near.y]);
+    expect(zap[0]!.points[2]).toEqual([far.x, far.y]);
+  });
+
+  it('does nothing with no hostile in range, and is ready the moment one arrives', () => {
+    const { world, coil } = coilTrain();
+    const e = world.spawnEnemy('sentry', coil.x, coil.y + 200);
+    const events = run(world, 30);
+    expect(ofType(events, 'zap')).toHaveLength(0);
+    expect(ofType(events, 'hit')).toHaveLength(0);
+    // The coil has moved 180 units east; bring the sentry into range.
+    e.x = coil.x + 180;
+    e.y = coil.y + 100;
+    expect(ofType(world.step(), 'zap')).toHaveLength(1);
+    expect(e.hull).toBe(180 - 18);
+  });
+
+  it('zaps once a second', () => {
+    const { world, coil } = coilTrain();
+    // The coil passes the sentry, staying within range for the 2 seconds.
+    const e = world.spawnEnemy('sentry', coil.x + 90, coil.y + 100);
+    const zaps = ofType(run(world, 60), 'zap');
+    expect(zaps.length).toBe(2);
+    expect(e.hull).toBe(180 - 36);
+  });
+
+  it('holds during spawn protection', () => {
+    const { world, coil } = coilTrain(5);
+    world.spawnEnemy('sentry', coil.x, coil.y + 100);
+    expect(ofType(run(world, 30), 'zap')).toHaveLength(0);
+  });
+
+  it("credits a kill to the coil's owner as a weapon kill", () => {
+    const { world, a, coil } = coilTrain();
+    const b = world.addTrain({
+      protectedFor: 0,
+      x: coil.x,
+      y: coil.y + 160,
+      angle: 0,
+      carriages: [],
+    });
+    b.hull = 10;
+    // b moves east with a, so the gap holds.
+    const destroyed = ofType(world.step(), 'trainDestroyed');
+    expect(destroyed).toEqual([
+      expect.objectContaining({ victimId: b.id, cause: 'weapon', killerTrainId: a.id }),
+    ]);
+    expect(a.kills).toBe(1);
+  });
+});
+
+describe('counter-drones against trains', () => {
+  it("fire at an enemy train's head when no PvE enemy is nearer", () => {
+    const world = emptyWorld();
+    const a = world.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      angle: 0,
+      carriages: ['drones'],
+    });
+    const b = world.addTrain({ protectedFor: 0, x: 1150, y: 1000, angle: 0, carriages: [] });
+    // In drone range too, but farther from every point of the drone's orbit than b's head.
+    world.spawnEnemy('sentry', 1000, 1240);
+    const events = run(world, 3);
+    const shot = ofType(events, 'fired').find((f) => f.weapon === 'drone' && f.ownerId === a.id);
+    expect(shot).toBeDefined();
+    // Aimed at b's head (to the east), not the far sentry (to the south).
+    expect(Math.abs(Math.cos(shot!.angle))).toBeGreaterThan(0.9);
+    expect(b.alive).toBe(true);
+  });
+
+  it('never fire at a protected train', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      angle: 0,
+      carriages: ['drones'],
+    });
+    world.addTrain({ protectedFor: 10, x: 1200, y: 1000, angle: 0, carriages: [] });
+    const events = run(world, 30);
+    expect(ofType(events, 'fired').filter((f) => f.ownerId === a.id)).toHaveLength(0);
   });
 });
 
@@ -215,6 +421,47 @@ describe('projectile hits', () => {
     expect(far.hull).toBeCloseTo(far.maxHull, 0);
   });
 
+  it('lets a laser pierce three targets in a line and stop at the fourth', () => {
+    const world = emptyWorld();
+    const drones = [3000, 3040, 3080, 3120].map((x) => {
+      const e = world.spawnEnemy('drone', x, 3000);
+      e.speed = 0;
+      return e;
+    });
+    inject(world, shot({ kind: 'laser', x: 2950, y: 3000, vx: 900, damage: 22, pierce: 3 }));
+    run(world, 10);
+    expect(drones.slice(0, 3).map((d) => d.hull)).toEqual([25 - 22, 25 - 22, 25 - 22]);
+    expect(drones[3]!.hull).toBe(25);
+    expect(world.state.projectiles).toHaveLength(0);
+  });
+
+  it('never hits the same target twice across ticks', () => {
+    const world = emptyWorld();
+    const sentry = world.spawnEnemy('sentry', 3000, 3000);
+    // Slow enough to spend many ticks inside the sentry's hit radius.
+    inject(
+      world,
+      shot({ kind: 'laser', x: 2975, y: 3000, vx: 60, damage: 22, pierce: 3, life: 2 }),
+    );
+    const hits = ofType(run(world, 30), 'hit').filter((h) => h.victimId === sentry.id);
+    expect(hits).toHaveLength(1);
+    expect(sentry.hull).toBe(180 - 22);
+    expect(world.state.projectiles).toHaveLength(1);
+  });
+
+  it('fires the laser about twice a second', () => {
+    const world = emptyWorld();
+    const a = world.addTrain({ protectedFor: 0, x: 1000, y: 1000, angle: 0, carriages: ['laser'] });
+    world.setInput(a.id, { aim: 0, fire: true });
+    const shots = ofType(run(world, 90), 'fired').filter((f) => f.ownerId === a.id);
+    expect(shots.length).toBeGreaterThanOrEqual(5);
+    expect(shots.length).toBeLessThanOrEqual(7);
+    expect(world.state.projectiles.find((p) => p.ownerId === a.id)).toMatchObject({
+      damage: 22,
+      pierce: 3,
+    });
+  });
+
   it('removes projectiles when their lifetime runs out', () => {
     const world = emptyWorld();
     inject(world, shot({ x: 100, y: 100, vx: 10, life: 0.2 }));
@@ -242,6 +489,36 @@ describe('projectile hits', () => {
     expect(a.hull).toBe(180 - 28);
     expect(b.hull).toBeCloseTo(180 - 28 * 0.6);
     expect(far.hull).toBe(180);
+  });
+
+  it("splashes other trains' heads but never the owner's", () => {
+    const world = emptyWorld();
+    // Heading along y, so each head stays within the splash radius after its first move.
+    const a = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      x: 3000,
+      y: 2980,
+      angle: -Math.PI / 2,
+    });
+    const b = world.addTrain({
+      protectedFor: 0,
+      carriages: [],
+      x: 3000,
+      y: 3030,
+      angle: Math.PI / 2,
+    });
+    const target = world.spawnEnemy('sentry', 3000, 3000);
+    inject(
+      world,
+      shot({ kind: 'missile', x: 2980, y: 3000, vx: 280, damage: 28, splash: 50, ownerId: a.id }),
+    );
+    const hits = ofType(world.step(), 'hit');
+    expect(target.hull).toBe(180 - 28);
+    expect(b.hull).toBeCloseTo(b.maxHull - 28 * 0.6);
+    expect(hits.find((h) => h.victimId === b.id)).toMatchObject({ attackerId: a.id });
+    expect(a.hull).toBe(a.maxHull);
+    expect(hits.some((h) => h.victimId === a.id)).toBe(false);
   });
 
   it('shots from one train can hit another train', () => {

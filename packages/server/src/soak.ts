@@ -1,4 +1,5 @@
-import { encodeMessage, MAX_TRAIN_PROJECTILES, PROTOCOL_VERSION } from '@lw/shared';
+import { encodeMessage, MAX_TRAIN_PROJECTILES, PICKUP_KINDS, PROTOCOL_VERSION } from '@lw/shared';
+import type { PickupKind } from '@lw/shared';
 import { WebSocket } from 'ws';
 import { parseConfig } from './config.ts';
 import { GameServer } from './server.ts';
@@ -10,8 +11,10 @@ import { GameServer } from './server.ts';
  *   npm run soak -w @lw/server
  *
  * Environment: SOAK_SECONDS (60), SOAK_CLIENTS (16), SOAK_BOTS (10, in-process server only),
- * SOAK_COMPRESS=1 (enable permessage-deflate, in-process server only), SOAK_URL (test an
- * already-running server, such as http://localhost:8080, instead of starting one).
+ * SOAK_COMPRESS=1 (enable permessage-deflate, in-process server only), SOAK_CARRIAGES (comma-
+ * separated carriage kinds added to every train each time it spawns, in-process server only),
+ * SOAK_URL (test an already-running server, such as http://localhost:8080, instead of starting
+ * one).
  *
  * Passes when ticks are within 1% of 30 per second and the 95th-percentile per-client downstream
  * rate (wire bytes, one sample per client per second) is at most 100 KB/s. With an in-process
@@ -23,6 +26,12 @@ const CLIENTS = Number(process.env.SOAK_CLIENTS ?? 16);
 const BOTS = Number(process.env.SOAK_BOTS ?? 10);
 const COMPRESS = process.env.SOAK_COMPRESS === '1';
 const EXTERNAL = process.env.SOAK_URL;
+const CARRIAGES = (process.env.SOAK_CARRIAGES ?? '')
+  .split(',')
+  .map((k) => k.trim())
+  .filter((k) => k.length > 0);
+const unknownKinds = CARRIAGES.filter((k) => !(PICKUP_KINDS as readonly string[]).includes(k));
+if (unknownKinds.length > 0) throw new Error(`unknown SOAK_CARRIAGES: ${unknownKinds.join(', ')}`);
 const TICK_RATE = 30;
 const TICK_TOLERANCE = 0.01;
 const MAX_KB_PER_SECOND = 100;
@@ -89,8 +98,21 @@ async function main(): Promise<boolean> {
   };
 
   console.log(
-    `soak: ${CLIENTS} clients for ${SECONDS}s against ${EXTERNAL ?? `in-process server (${BOTS} bots, deflate ${COMPRESS ? 'on' : 'off'})`}`,
+    `soak: ${CLIENTS} clients for ${SECONDS}s against ${EXTERNAL ?? `in-process server (${BOTS} bots, deflate ${COMPRESS ? 'on' : 'off'})`}` +
+      (CARRIAGES.length > 0 && server ? `, every train given ${CARRIAGES.join(', ')}` : ''),
   );
+
+  // Forced carriages: added to each train once per spawn, checked a few times a second.
+  const outfitted = new Map<number, number>();
+  const outfit = (): void => {
+    if (!server || CARRIAGES.length === 0) return;
+    for (const t of server.world.state.trains) {
+      if (!t.alive || outfitted.get(t.id) === t.spawnSeq) continue;
+      outfitted.set(t.id, t.spawnSeq);
+      for (const kind of CARRIAGES) server.world.addCarriage(t.id, kind as PickupKind);
+    }
+  };
+  const outfitter = setInterval(outfit, 250);
 
   const slots: Slot[] = Array.from({ length: CLIENTS }, () => ({
     ws: null,
@@ -151,6 +173,7 @@ async function main(): Promise<boolean> {
   for (const slot of slots) slot.lastBytes = slot.ws ? bytesRead(slot.ws) : 0;
 
   let peakShots = 0;
+  let peakMines = 0;
   const sampler = setInterval(() => {
     if (server) {
       const perTrain = new Map<number, number>();
@@ -160,6 +183,7 @@ async function main(): Promise<boolean> {
         }
       }
       for (const n of perTrain.values()) peakShots = Math.max(peakShots, n);
+      peakMines = Math.max(peakMines, server.world.state.mines.length);
     }
     for (const slot of slots) {
       if (!slot.ws) continue;
@@ -174,6 +198,7 @@ async function main(): Promise<boolean> {
   const ticks = (await readTick()) - tick0;
   clearInterval(sampler);
   clearInterval(driver);
+  clearInterval(outfitter);
   for (const slot of slots) slot.ws?.close();
 
   const expected = elapsed * TICK_RATE;
@@ -200,6 +225,7 @@ async function main(): Promise<boolean> {
       `peak weapon projectiles per train: ${peakShots} ` +
         `${shotsOk ? 'OK' : `FAIL (budget ${MAX_TRAIN_PROJECTILES})`}`,
     );
+    console.log(`peak mines in the world: ${peakMines}`);
   }
 
   await server?.close();

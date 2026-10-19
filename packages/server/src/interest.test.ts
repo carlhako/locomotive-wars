@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { SimEvent } from '@lw/shared';
 import { MetaTracker, selectEvents, selectVisible, trainInView } from './interest.ts';
+import { buildSnapshot } from './snapshot.ts';
 import { emptyWorld } from './testing.ts';
 
 describe('selectVisible', () => {
@@ -56,6 +58,33 @@ describe('selectVisible', () => {
   });
 });
 
+describe('mines in view', () => {
+  it('sends an armed mine 500 units away with its owner and armed state', () => {
+    const world = emptyWorld();
+    const me = world.addTrain({ x: 1000, y: 1000 });
+    const owner = world.addTrain({ x: 4000, y: 4000 });
+    world.state.mines.push(
+      { id: 501, x: 1500, y: 1000, ownerId: owner.id, age: 3 },
+      { id: 502, x: 1000, y: 1300, ownerId: me.id, age: 0.1 },
+      { id: 503, x: 4000, y: 1000, ownerId: owner.id, age: 3 },
+    );
+    const visible = selectVisible(world, me.x, me.y, 1600, me.id);
+    expect(visible.mines.map((m) => m.id)).toEqual([501, 502]);
+    const snap = buildSnapshot({
+      tick: 1,
+      serverTimeMs: 0,
+      ack: 0,
+      own: me,
+      visible,
+      events: [],
+    });
+    expect(snap.mn).toEqual([
+      [501, owner.id, 1500, 1000, 1],
+      [502, me.id, 1000, 1300, 0],
+    ]);
+  });
+});
+
 describe('selectEvents', () => {
   const size = 6000;
   const hit = (x: number, victimId: number) =>
@@ -91,6 +120,42 @@ describe('selectEvents', () => {
   it('keeps a distant event that involves the session train', () => {
     const involving = hit(4000, 1);
     expect(selectEvents([involving], 1000, 1000, 1600, 1, size)).toEqual([involving]);
+  });
+
+  it('routes zaps and mine explosions by position or by owner', () => {
+    const zap = (x: number, ownerId: number): SimEvent => ({
+      type: 'zap',
+      ownerId,
+      points: [
+        [x, 1000],
+        [x + 100, 1000],
+      ],
+      x,
+      y: 1000,
+    });
+    const boom = (x: number, ownerId: number): SimEvent => ({
+      type: 'mineExploded',
+      mineId: 70,
+      ownerId,
+      x,
+      y: 1000,
+    });
+    const nearZap = zap(1200, 5);
+    const farZap = zap(4000, 5);
+    const ownFarZap = zap(4000, 1);
+    const nearBoom = boom(1300, 5);
+    const farBoom = boom(4200, 5);
+    const ownFarBoom = boom(4200, 1);
+    expect(
+      selectEvents(
+        [nearZap, farZap, ownFarZap, nearBoom, farBoom, ownFarBoom],
+        1000,
+        1000,
+        1600,
+        1,
+        size,
+      ),
+    ).toEqual([nearZap, ownFarZap, nearBoom, ownFarBoom]);
   });
 });
 

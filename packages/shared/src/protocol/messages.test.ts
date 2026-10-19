@@ -34,6 +34,10 @@ const snapshot: SnapshotMsg = {
   tl: [[9, 2, 50, 60]],
   dr: [[10, 4, 70, 80, 1.5]],
   pr: [[11, 1, 90, 100, 200, -50]],
+  mn: [
+    [12, 7, 110, 120, 1],
+    [13, 9, 130, 140, 0],
+  ],
   ev: [
     { type: 'trainDestroyed', victimId: 7, cause: 'ram', killerTrainId: 9, x: 5, y: 6 },
     {
@@ -47,6 +51,18 @@ const snapshot: SnapshotMsg = {
       y: 2,
     },
     { type: 'trainLeft', trainId: 8, x: 3, y: 4 },
+    {
+      type: 'zap',
+      ownerId: 7,
+      points: [
+        [10, 20],
+        [30, 40],
+        [50, 60],
+      ],
+      x: 10,
+      y: 20,
+    },
+    { type: 'mineExploded', mineId: 12, ownerId: 7, x: 110, y: 120 },
   ],
 };
 
@@ -79,7 +95,7 @@ const serverMessages: ServerMessage[] = [
     gone: [2, 3],
   },
   snapshot,
-  { ...snapshot, me: null, tr: [], en: [], tl: [], dr: [], pr: [], ev: [] },
+  { ...snapshot, me: null, tr: [], en: [], tl: [], dr: [], pr: [], mn: [], ev: [] },
   {
     t: 'ov',
     h: [[4, 10, 20, '#fff', 'Casey']],
@@ -199,6 +215,12 @@ describe('decodeServerMessage', () => {
     [
       'a snapshot with a train row missing its spawn counter',
       JSON.stringify({ ...snapshot, tr: [[7, 10, 20, 3.14, 90, 100, 1]] }),
+    ],
+    ['a snapshot without mines', JSON.stringify({ ...snapshot, mn: undefined })],
+    ['a snapshot with a short mine row', JSON.stringify({ ...snapshot, mn: [[1, 2, 3, 4]] })],
+    [
+      'a snapshot with a mine armed flag that is not 0 or 1',
+      JSON.stringify({ ...snapshot, mn: [[1, 2, 3, 4, 2]] }),
     ],
     [
       'an own train without a spawn counter',

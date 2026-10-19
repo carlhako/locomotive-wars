@@ -1,11 +1,25 @@
-import type { WorldView } from '@lw/shared';
+import type { MinimapEntry, WorldView } from '@lw/shared';
 import { CARRIAGE_TYPES, LOCAL_COLOR } from './palette.ts';
 
 /** Minimap canvas side length in pixels (reference line 2460). */
 export const MINIMAP_SIZE = 180;
 
 /**
- * Draws the whole map: trailers, drops, enemies, all living trains with the local one
+ * The trains the minimap shows: every entry except other trains known to carry a cloak. Online
+ * the server already leaves cloaked trains out of the overview; this covers offline play, and a
+ * cloak picked up since the last overview.
+ */
+export function minimapEntries(view: WorldView): MinimapEntry[] {
+  const cloaked = new Set(
+    view.trains
+      .filter((t) => t.id !== view.localId && t.carriages.some((c) => c.kind === 'cloak'))
+      .map((t) => t.id),
+  );
+  return cloaked.size === 0 ? view.minimap : view.minimap.filter((e) => !cloaked.has(e.id));
+}
+
+/**
+ * Draws the whole map: trailers, drops, enemies, all living uncloaked trains with the local one
  * highlighted, and the local viewport and heading (reference updateMinimap, lines 2458-2520).
  */
 export function drawMinimap(
@@ -55,7 +69,7 @@ export function drawMinimap(
     m.fill();
   }
 
-  for (const t of view.minimap) {
+  for (const t of minimapEntries(view)) {
     m.fillStyle = t.isLocal ? LOCAL_COLOR : t.color;
     m.beginPath();
     m.arc(t.x * scale, t.y * scale, t.isLocal ? 4 : 3, 0, Math.PI * 2);

@@ -34,6 +34,8 @@ describe('CARRIAGE_TYPES', () => {
   it('classes the weapon carriages', () => {
     expect(isWeaponCarriage('mg')).toBe(true);
     expect(isWeaponCarriage('laser')).toBe(true);
+    expect(isWeaponCarriage('flak')).toBe(true);
+    expect(isWeaponCarriage('tailgun')).toBe(false);
     expect(isWeaponCarriage('shield')).toBe(false);
     expect(isWeaponCarriage('locomotive')).toBe(false);
   });
@@ -52,6 +54,20 @@ describe('descriptions', () => {
     } finally {
       WEAPONS.mg.damage = before;
     }
+  });
+
+  it('describes the new and changed types from the simulation constants', () => {
+    expect(CARRIAGE_TYPES.laser.describe()).toBe('2/s × 22 · pierce 3');
+    expect(CARRIAGE_TYPES.flak.describe()).toBe('5 × 6 dmg · short');
+    expect(CARRIAGE_TYPES.mines.describe()).toBe('Mine/2s · 40 dmg');
+    expect(CARRIAGE_TYPES.tailgun.describe()).toBe('Rear auto · 3/s × 6');
+    expect(CARRIAGE_TYPES.tesla.describe()).toBe('Zap 180 · 18 dmg ×2');
+    expect(CARRIAGE_TYPES.repair.describe()).toBe('+1.5 hull/s (max 6)');
+    expect(CARRIAGE_TYPES.cowcatcher.describe()).toBe('+20 ram · −10% ram dmg');
+    expect(CARRIAGE_TYPES.cloak.describe()).toBe('Hidden on minimap');
+    expect(CARRIAGE_TYPES.armor.describe()).toBe('+70 max hull');
+    expect(CARRIAGE_TYPES.speed.describe()).toBe('+7% speed (max 50%)');
+    expect(CARRIAGE_TYPES.fuel.describe()).toBe('+15% tank · +20% regen');
   });
 
   it('keeps every description to one short line', () => {

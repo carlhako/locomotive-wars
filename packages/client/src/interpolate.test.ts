@@ -38,6 +38,7 @@ function view(t: TrainView, time = 0): WorldView {
     trailers: [],
     drops: [],
     projectiles: [],
+    mines: [],
     minimap: [{ id: t.id, x: t.x, y: t.y, color: t.color, isLocal: true }],
   };
 }

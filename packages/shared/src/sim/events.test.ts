@@ -23,6 +23,8 @@ describe('event stream', () => {
       damage: 7,
       life: 1,
       splash: 0,
+      pierce: 1,
+      hitIds: [],
       ownerKind: 'enemy',
       ownerId: 4242,
     });
@@ -60,6 +62,8 @@ describe('event stream', () => {
       damage: 7,
       life: 1,
       splash: 0,
+      pierce: 1,
+      hitIds: [],
       ownerKind: 'train',
       ownerId: 5,
     });

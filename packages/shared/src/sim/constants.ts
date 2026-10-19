@@ -37,6 +37,8 @@ export const FUEL_DRAIN = 28;
 export const FUEL_REGEN = 12;
 /** ref:558: fuel cap is FUEL_MAX * (1 + fuelBonus * this). */
 export const FUEL_CAPACITY_PER_BONUS = 0.5;
+/** new: fuel regen is FUEL_REGEN * (1 + fuelBonus * this), +20% per tank. */
+export const FUEL_REGEN_PER_BONUS = 2 / 3;
 
 // ===== Hull =====
 /** ref:478: hull before the first max-hull clamp. */
@@ -51,11 +53,24 @@ export const HULL_REGEN = 0.25;
 export const DAMAGE_REDUCTION_CAP = 0.7;
 
 // ===== Carriage effects (ref:531-536) =====
-export const ARMOR_BONUS = 35;
+/** Changed: 35 in the reference. */
+export const ARMOR_BONUS = 70;
 export const SPEED_BONUS = 0.07;
+/** new: a train's total speed bonus is capped at this, applied where it is read. */
+export const SPEED_BONUS_CAP = 0.5;
 export const FUEL_BONUS = 0.3;
 export const MAGNET_BONUS = 14;
 export const SHIELD_REDUCTION = 0.08;
+/** new: hull/s of regeneration per repair car... */
+export const REPAIR_BONUS = 1.5;
+/** ...with the total repair bonus capped at this, applied where it is read. */
+export const REPAIR_CAP = 6;
+/** new: per cowcatcher, extra ram damage dealt to enemies... */
+export const COWCATCHER_RAM_BONUS = 20;
+/** ...and the fraction of ram damage taken that it removes... */
+export const COWCATCHER_RAM_REDUCTION = 0.1;
+/** ...with the total ram reduction capped at this. */
+export const RAM_REDUCTION_CAP = 0.7;
 
 // ===== Pickups =====
 /** ref:188 */
@@ -76,7 +91,7 @@ export interface TrailerType {
   /** Rarity weight for random draws. */
   rarity: number;
 }
-/** ref:207-217, same order so weighted draws match. */
+/** ref:207-217, same order so weighted draws match; the change-10 types are appended after. */
 export const TRAILER_TYPES: readonly TrailerType[] = [
   { kind: 'mg', rarity: 1.0 },
   { kind: 'missile', rarity: 0.7 },
@@ -87,6 +102,14 @@ export const TRAILER_TYPES: readonly TrailerType[] = [
   { kind: 'speed', rarity: 0.9 },
   { kind: 'magnet', rarity: 0.8 },
   { kind: 'fuel', rarity: 0.9 },
+  // new (change 10)
+  { kind: 'flak', rarity: 0.7 },
+  { kind: 'mines', rarity: 0.5 },
+  { kind: 'tailgun', rarity: 0.6 },
+  { kind: 'tesla', rarity: 0.5 },
+  { kind: 'repair', rarity: 0.6 },
+  { kind: 'cowcatcher', rarity: 0.6 },
+  { kind: 'cloak', rarity: 0.3 },
 ];
 
 // ===== Population =====
@@ -170,18 +193,76 @@ export interface WeaponStats {
   damage: number;
   /** Projectile speed, units/s. */
   speed: number;
-  /** Splash radius against enemies; 0 for none. */
+  /** Splash radius against enemies and other trains' heads; 0 for none. */
   splash: number;
   projectile: ProjectileKind;
+  /** Different targets one projectile damages before it is consumed. Default 1. */
+  pierce?: number;
+  /** Projectiles per shot. Default 1. */
+  pellets?: number;
+  /** Pellets are spread evenly across aim ± this, in radians. Default 0. */
+  spread?: number;
+  /** Projectile lifetime in seconds. Default `PROJECTILE_LIFE`. */
+  life?: number;
 }
 export const WEAPONS: Record<WeaponKind, WeaponStats> = {
   /** ref:733 */
   mg: { fireRate: 7, damage: 7, speed: 550, splash: 0, projectile: 'bullet' },
   /** ref:734 */
   missile: { fireRate: 0.9, damage: 28, speed: 280, splash: 50, projectile: 'missile' },
-  /** ref:735 */
-  laser: { fireRate: 3.5, damage: 14, speed: 900, splash: 0, projectile: 'laser' },
+  /** ref:735, changed: 3.5/s × 14 with no pierce in the reference. */
+  laser: { fireRate: 2, damage: 22, speed: 900, splash: 0, projectile: 'laser', pierce: 3 },
+  /** new: a short-range 5-pellet spread over ±15°, about 250 units of reach. */
+  flak: {
+    fireRate: 1.2,
+    damage: 6,
+    speed: 600,
+    splash: 0,
+    projectile: 'flak',
+    pellets: 5,
+    spread: Math.PI / 12,
+    life: 0.42,
+  },
 };
+
+// ===== Auto weapons (new) =====
+/** Tail gunner shots: bullets, counted toward the projectile budget. */
+export const TAILGUN: WeaponStats = {
+  fireRate: 3,
+  damage: 6,
+  speed: 550,
+  splash: 0,
+  projectile: 'bullet',
+};
+/** The tail gunner fires at hostiles within this range... */
+export const TAILGUN_RANGE = 400;
+/** ...and within this angle of the direction opposite the carriage's heading. */
+export const TAILGUN_ARC = Math.PI / 2;
+/** Tesla coil: an instant zap at the nearest hostile in range... */
+export const TESLA_RANGE = 180;
+export const TESLA_DAMAGE = 18;
+/** Seconds between zaps; only spent when something was zapped. */
+export const TESLA_COOLDOWN = 1;
+/** ...then the same damage to the nearest other hostile this close to the first. */
+export const TESLA_CHAIN_RANGE = 120;
+
+// ===== Mines (new) =====
+/** Seconds between drops per mine layer. */
+export const MINE_INTERVAL = 2;
+/** Seconds after the drop before a mine can go off. */
+export const MINE_ARM_TIME = 0.5;
+/** Seconds after the drop before an unexploded mine disappears. */
+export const MINE_LIFE = 20;
+/** An armed mine goes off when an enemy or another train's head comes this close... */
+export const MINE_TRIGGER_RADIUS = 20;
+/** ...and damages every enemy and other train's head this close. */
+export const MINE_BLAST_RADIUS = 60;
+export const MINE_DAMAGE = 40;
+/** Live mines a train may have per mine layer it carries... */
+export const MINES_PER_LAYER = 6;
+/** ...and in total. */
+export const MAX_TRAIN_MINES = 24;
+
 /** new: most weapon-carriage projectiles one train may have in flight at once. */
 export const MAX_TRAIN_PROJECTILES = 120;
 /** ref:731: bots fire only at a target this close to their head. */

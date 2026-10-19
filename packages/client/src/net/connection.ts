@@ -576,6 +576,7 @@ function emptyView(localId: number): WorldView {
     trailers: [],
     drops: [],
     projectiles: [],
+    mines: [],
     minimap: [],
   };
 }

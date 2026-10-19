@@ -1,5 +1,6 @@
 import {
   ENEMY_KINDS,
+  MINE_ARM_TIME,
   PICKUP_KINDS,
   PROJECTILE_KINDS,
   shortAngle,
@@ -81,6 +82,9 @@ export function roundEvent(e: SimEvent): SimEvent {
   }
   if (typeof out.angle === 'number') out.angle = r2(out.angle);
   if (typeof out.amount === 'number') out.amount = r2(out.amount);
+  if (Array.isArray(out.points)) {
+    out.points = (out.points as Array<[number, number]>).map(([x, y]) => [round(x), round(y)]);
+  }
   return out as unknown as SimEvent;
 }
 
@@ -133,6 +137,13 @@ export function buildSnapshot(input: SnapshotInput): SnapshotMsg {
       round(p.y),
       round(p.vx),
       round(p.vy),
+    ]),
+    mn: visible.mines.map((m) => [
+      m.id,
+      m.ownerId,
+      round(m.x),
+      round(m.y),
+      m.age >= MINE_ARM_TIME ? 1 : 0,
     ]),
     ev: input.events.map(roundEvent),
   };

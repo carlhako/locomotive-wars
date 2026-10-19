@@ -518,13 +518,18 @@ export class GameServer {
     }
   }
 
+  /** Cloaked trains are left out of everyone's overview but their own. */
   private sendOverviews(): void {
     const trains = this.world.state.trains;
     const ranked = rankTrains(trains);
     const base = buildOverview(trains, buildLeaderboard(ranked));
+    const cloaked = new Set(trains.filter((t) => t.cloaks > 0).map((t) => t.id));
     for (const s of this.sessions) {
       if (s.trainId === null || !canSend(s.ws)) continue;
-      s.ws.send(encodeMessage({ ...base, rk: rankOf(ranked, s.trainId) }));
+      const own = s.trainId;
+      const h =
+        cloaked.size === 0 ? base.h : base.h.filter((r) => r[0] === own || !cloaked.has(r[0]));
+      s.ws.send(encodeMessage({ ...base, h, rk: rankOf(ranked, own) }));
     }
   }
 
@@ -549,6 +554,7 @@ const EMPTY_VISIBLE: Visible = {
   trailers: [],
   drops: [],
   projectiles: [],
+  mines: [],
 };
 
 function canSend(ws: WebSocket): boolean {

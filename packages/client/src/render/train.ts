@@ -22,6 +22,8 @@ export interface TrainDrawOptions {
   aim: number | null;
   /** True for a moment after the train was hit. */
   flashing: boolean;
+  /** Where an auto turret (a tail gunner) at a carriage index last fired, or null. */
+  turretAngle?: (carriage: number) => number | null;
 }
 
 /**
@@ -72,7 +74,7 @@ export function drawTrain(env: DrawEnv, train: TrainView, opts: TrainDrawOptions
     const px = screenX(env, c.x);
     const py = screenY(env, c.y);
     if (!onScreen(env, px, py, 30)) continue;
-    drawCarriage(ctx, c, px, py, opts.aim);
+    drawCarriage(ctx, c, px, py, opts.aim, opts.turretAngle?.(i) ?? null);
   }
 
   for (const angle of train.drones) {
@@ -140,12 +142,16 @@ function drawShieldRing(env: DrawEnv, px: number, py: number): void {
   ctx.restore();
 }
 
+/** Repair cars carry a red cross. */
+const REPAIR_ICON_COLOR = '#e02020';
+
 function drawCarriage(
   ctx: CanvasRenderingContext2D,
   c: CarriageView,
   px: number,
   py: number,
   aim: number | null,
+  turret: number | null,
 ): void {
   ctx.save();
   ctx.translate(px, py);
@@ -164,7 +170,7 @@ function drawCarriage(
   ctx.fillRect(4, -6, 2, 1);
   ctx.fillRect(4, 5, 2, 1);
 
-  if (isWeaponCarriage(c.kind)) {
+  if (isWeaponCarriage(c.kind) || c.kind === 'tailgun') {
     ctx.fillStyle = colors.light;
     ctx.beginPath();
     ctx.arc(0, 0, 3, 0, Math.PI * 2);
@@ -173,21 +179,48 @@ function drawCarriage(
     ctx.beginPath();
     ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.rotate((aim ?? c.angle) - c.angle);
+    // Manual weapons follow the aim; a tail gunner looks backward until it fires.
+    const facing = c.kind === 'tailgun' ? (turret ?? c.angle + Math.PI) : (aim ?? c.angle);
+    ctx.rotate(facing - c.angle);
     ctx.fillStyle = colors.light;
     if (c.kind === 'mg') {
       ctx.fillRect(0, -1, 6, 2);
     } else if (c.kind === 'missile') {
       ctx.fillRect(0, -1.5, 7, 3);
+    } else if (c.kind === 'flak') {
+      // Short and wide, like a scattergun.
+      ctx.fillRect(0, -2.5, 5, 5);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(4, -1.5, 1, 3);
+    } else if (c.kind === 'tailgun') {
+      ctx.fillRect(0, -1, 7, 2);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(6, -0.5, 1, 1);
     } else {
       ctx.fillRect(0, -1, 8, 2);
       ctx.fillStyle = '#ffee88';
       ctx.fillRect(0, -0.5, 8, 1);
     }
   } else if (c.kind !== 'locomotive') {
-    // Non-weapon carriages carry their type's icon, kept upright whatever the heading.
+    if (c.kind === 'cowcatcher') {
+      // A wedge on the leading edge, inside the body: the carriage ahead covers anything beyond.
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(4, -5);
+      ctx.lineTo(7.5, 0);
+      ctx.lineTo(4, 5);
+      ctx.stroke();
+    } else if (c.kind === 'tesla') {
+      ctx.strokeStyle = colors.light;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // Other carriages carry their type's icon, kept upright whatever the heading.
     ctx.rotate(-c.angle);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.fillStyle = c.kind === 'repair' ? REPAIR_ICON_COLOR : 'rgba(0, 0, 0, 0.75)';
     ctx.font = 'bold 8px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

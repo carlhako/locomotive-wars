@@ -1,24 +1,36 @@
 import {
   ARMOR_BONUS,
+  COWCATCHER_RAM_BONUS,
+  COWCATCHER_RAM_REDUCTION,
   DAMAGE_REDUCTION_CAP,
   DRONE_DAMAGE,
   DRONE_RANGE,
   FUEL_BONUS,
   FUEL_CAPACITY_PER_BONUS,
+  FUEL_REGEN_PER_BONUS,
   MAGNET_BONUS,
+  MINE_DAMAGE,
+  MINE_INTERVAL,
+  REPAIR_BONUS,
+  REPAIR_CAP,
   SHIELD_REDUCTION,
   SPEED_BONUS,
+  SPEED_BONUS_CAP,
+  TAILGUN,
+  TESLA_DAMAGE,
+  TESLA_RANGE,
   WEAPONS,
 } from '@lw/shared';
 import type { CarriageKind, PickupKind } from '@lw/shared';
 
-/** Legend groups, in the order the legend shows them. */
-export type CarriageCategory = 'weapon' | 'defence' | 'support';
+/** Legend groups, in the order the legend shows them. `auto` weapons fire without the button. */
+export type CarriageCategory = 'weapon' | 'auto' | 'defence' | 'support';
 
-export const CATEGORY_ORDER: readonly CarriageCategory[] = ['weapon', 'defence', 'support'];
+export const CATEGORY_ORDER: readonly CarriageCategory[] = ['weapon', 'auto', 'defence', 'support'];
 
 export const CATEGORY_LABELS: Record<CarriageCategory, string> = {
   weapon: 'Weapons',
+  auto: 'Auto weapons',
   defence: 'Defence',
   support: 'Support',
 };
@@ -95,8 +107,33 @@ export const CARRIAGE_TYPES: Record<PickupKind, CarriageType> = {
   }),
   laser: type('Laser', 'L', 'weapon', '#ff40e0', () => {
     const w = WEAPONS.laser;
-    return `${fmt(w.fireRate)}/s × ${fmt(w.damage)} dmg · fast`;
+    return `${fmt(w.fireRate)}/s × ${fmt(w.damage)} · pierce ${fmt(w.pierce ?? 1)}`;
   }),
+  flak: type('Flak', 'K', 'weapon', '#b0ff30', () => {
+    const w = WEAPONS.flak;
+    return `${fmt(w.pellets ?? 1)} × ${fmt(w.damage)} dmg · short`;
+  }),
+  mines: type(
+    'Mine Layer',
+    'X',
+    'auto',
+    '#8a8f3a',
+    () => `Mine/${fmt(MINE_INTERVAL)}s · ${fmt(MINE_DAMAGE)} dmg`,
+  ),
+  tailgun: type(
+    'Tail Gunner',
+    'T',
+    'auto',
+    '#ff6a9e',
+    () => `Rear auto · ${fmt(TAILGUN.fireRate)}/s × ${fmt(TAILGUN.damage)}`,
+  ),
+  tesla: type(
+    'Tesla Coil',
+    'Z',
+    'auto',
+    '#30d0b0',
+    () => `Zap ${fmt(TESLA_RANGE)} · ${fmt(TESLA_DAMAGE)} dmg ×2`,
+  ),
   shield: type(
     'Shield',
     'S',
@@ -112,15 +149,37 @@ export const CARRIAGE_TYPES: Record<PickupKind, CarriageType> = {
     () => `Drone · ${fmt(DRONE_DAMAGE)} dmg, range ${fmt(DRONE_RANGE)}`,
   ),
   armor: type('Armor', 'A', 'defence', '#9a5cff', () => `+${fmt(ARMOR_BONUS)} max hull`),
-  speed: type('Booster', 'B', 'support', '#40ff80', () => `+${pct(SPEED_BONUS)}% speed`),
+  cowcatcher: type(
+    'Cowcatcher',
+    'C',
+    'defence',
+    '#a0a8b8',
+    () => `+${fmt(COWCATCHER_RAM_BONUS)} ram · −${pct(COWCATCHER_RAM_REDUCTION)}% ram dmg`,
+  ),
+  speed: type(
+    'Booster',
+    'B',
+    'support',
+    '#40ff80',
+    () => `+${pct(SPEED_BONUS)}% speed (max ${pct(SPEED_BONUS_CAP)}%)`,
+  ),
   magnet: type('Magnet', '◆', 'support', '#ffff40', () => `+${fmt(MAGNET_BONUS)} pickup radius`),
   fuel: type(
     'Fuel Tank',
     'F',
     'support',
     '#d9a066',
-    () => `+${pct(FUEL_BONUS * FUEL_CAPACITY_PER_BONUS)}% fuel capacity`,
+    () =>
+      `+${pct(FUEL_BONUS * FUEL_CAPACITY_PER_BONUS)}% tank · +${pct(FUEL_BONUS * FUEL_REGEN_PER_BONUS)}% regen`,
   ),
+  repair: type(
+    'Repair Car',
+    '+',
+    'support',
+    '#f4f4f4',
+    () => `+${fmt(REPAIR_BONUS)} hull/s (max ${fmt(REPAIR_CAP)})`,
+  ),
+  cloak: type('Cloak', '?', 'support', '#5a4f7a', () => 'Hidden on minimap'),
 };
 
 /** The locomotive: not a pickup, so it has colours but no legend row. */

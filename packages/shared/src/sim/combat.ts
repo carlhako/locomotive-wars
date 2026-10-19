@@ -22,12 +22,21 @@ import {
   RAM_DAMAGE_TO_TRAIN,
   RAM_RADIUS,
   SPLASH_DAMAGE_FACTOR,
+  TAILGUN,
+  TAILGUN_ARC,
+  TAILGUN_RANGE,
+  TESLA_CHAIN_RANGE,
+  TESLA_COOLDOWN,
+  TESLA_DAMAGE,
+  TESLA_RANGE,
   WEAPON_MUZZLE_OFFSET,
   WEAPONS,
 } from './constants.ts';
-import { segmentCircleHit, wrapAngle, wrapDist, wrapPos } from './math.ts';
-import { damageReductionOf } from './train.ts';
+import type { WeaponStats } from './constants.ts';
+import { segmentCircleHit, shortAngle, wrapAngle, wrapDist, wrapPos } from './math.ts';
+import { damageReductionOf, ramReductionOf } from './train.ts';
 import type {
+  Carriage,
   DamageSource,
   EnemyState,
   EntityKind,
@@ -52,8 +61,11 @@ export function spawnProjectile(
     damage: number;
     life: number;
     splash?: number;
+    pierce?: number;
     ownerKind: EntityKind;
     ownerId: number;
+    /** Carriage index to name in the fired event. */
+    carriage?: number;
   },
 ): Projectile {
   const size = world.rules.size;
@@ -69,9 +81,11 @@ export function spawnProjectile(
     splash: spec.splash ?? 0,
     ownerKind: spec.ownerKind,
     ownerId: spec.ownerId,
+    pierce: spec.pierce ?? 1,
+    hitIds: [],
   };
   world.state.projectiles.push(p);
-  world.emit({
+  const fired: Extract<SimEvent, { type: 'fired' }> = {
     type: 'fired',
     weapon: spec.kind,
     ownerKind: spec.ownerKind,
@@ -79,7 +93,9 @@ export function spawnProjectile(
     x: p.x,
     y: p.y,
     angle: spec.angle,
-  });
+  };
+  if (spec.carriage !== undefined) fired.carriage = spec.carriage;
+  world.emit(fired);
   return p;
 }
 
@@ -226,10 +242,61 @@ export function damageEnemy(
   });
 }
 
+// ===== Targeting =====
+
+/** Something a train can shoot at: a living enemy, or another train's unprotected head. */
+export type Hostile =
+  | { kind: 'enemy'; enemy: EnemyState; id: number; x: number; y: number; dist: number }
+  | { kind: 'train'; train: TrainState; id: number; x: number; y: number; dist: number };
+
+/**
+ * The hostile nearest to (x, y), strictly within `range`, for `train`: living enemies first, then
+ * other living, unprotected train heads (an exact tie goes to the enemy). `filter` can rule
+ * candidates out, by position or by id.
+ */
+export function nearestHostile(
+  world: World,
+  train: TrainState,
+  x: number,
+  y: number,
+  range: number,
+  filter?: (h: { id: number; x: number; y: number }) => boolean,
+): Hostile | null {
+  const size = world.rules.size;
+  let best: Hostile | null = null;
+  let bestDist = range;
+  for (const e of world.state.enemies) {
+    if (e.hull <= 0) continue;
+    const d = wrapDist(x, y, e.x, e.y, size);
+    if (d >= bestDist || (filter && !filter(e))) continue;
+    bestDist = d;
+    best = { kind: 'enemy', enemy: e, id: e.id, x: e.x, y: e.y, dist: d };
+  }
+  for (const t of world.state.trains) {
+    if (t === train || !t.alive || t.protectedFor > 0) continue;
+    const d = wrapDist(x, y, t.x, t.y, size);
+    if (d >= bestDist || (filter && !filter(t))) continue;
+    bestDist = d;
+    best = { kind: 'train', train: t, id: t.id, x: t.x, y: t.y, dist: d };
+  }
+  return best;
+}
+
+/** Damages a hostile, enemy or train head, crediting `source`. */
+export function damageHostile(
+  world: World,
+  target: Hostile,
+  amount: number,
+  source: DamageSource,
+): void {
+  if (target.kind === 'enemy') damageEnemy(world, target.enemy, amount, source);
+  else damageTrain(world, target.train, amount, source);
+}
+
 // ===== Weapons =====
 
 function isWeapon(kind: string): kind is WeaponKind {
-  return kind === 'mg' || kind === 'missile' || kind === 'laser';
+  return kind === 'mg' || kind === 'missile' || kind === 'laser' || kind === 'flak';
 }
 
 /** Projectile kinds fired by weapon carriages (counter-drone shots are not among them). */
@@ -249,10 +316,11 @@ export function countWeaponProjectiles(world: World): Map<number, number> {
 
 /**
  * Fires each ready weapon carriage along the train's aim angle while the fire input is on,
- * whatever the carriage's heading and whether or not anything is in range. Cooldowns tick down
+ * whatever the carriage's heading and whether or not anything is in range, and each ready auto
+ * weapon (tail gunner, tesla coil) at whatever it finds, fire input or not. Cooldowns tick down
  * every tick. A protected train holds fire, and a train with `MAX_TRAIN_PROJECTILES` of its
  * shots in flight waits. `live` holds those counts (see `countWeaponProjectiles`) and is
- * updated as the train fires.
+ * updated as the train fires. Mine layers use their timer slot too, but drop in `stepMines`.
  */
 export function fireWeapons(world: World, train: TrainState, live: Map<number, number>): void {
   const dt = world.dt;
@@ -260,32 +328,116 @@ export function fireWeapons(world: World, train: TrainState, live: Map<number, n
   const aim = train.input.aim;
   for (let i = 0; i < train.carriages.length; i++) {
     const c = train.carriages[i];
-    if (!c || !isWeapon(c.kind)) continue;
+    if (!c || (!isWeapon(c.kind) && c.kind !== 'tailgun' && c.kind !== 'tesla')) continue;
     // Floor at -dt so an idle weapon is ready next tick without banking a burst of shots.
     const timer = Math.max((train.fireTimers[i] ?? 0) - dt, -dt);
     train.fireTimers[i] = timer;
-    if (holding || timer > 0) continue;
-    const inFlight = live.get(train.id) ?? 0;
-    if (inFlight >= MAX_TRAIN_PROJECTILES) continue;
-    live.set(train.id, inFlight + 1);
-    const stats = WEAPONS[c.kind];
-    train.fireTimers[i] = timer + 1 / stats.fireRate;
+    if (timer > 0 || train.protectedFor > 0) continue;
+    if (c.kind === 'tailgun') {
+      if (fireTailGun(world, train, i, live)) train.fireTimers[i] = timer + 1 / TAILGUN.fireRate;
+    } else if (c.kind === 'tesla') {
+      if (zapTesla(world, train, c)) train.fireTimers[i] = timer + TESLA_COOLDOWN;
+    } else if (isWeapon(c.kind) && !holding) {
+      const stats = WEAPONS[c.kind];
+      if (fireVolley(world, train, c, stats, aim, live) > 0) {
+        train.fireTimers[i] = timer + 1 / stats.fireRate;
+      }
+    }
+  }
+}
+
+/**
+ * Tail gunner: one bullet at the nearest hostile within range in the carriage's rear half (within
+ * `TAILGUN_ARC` of straight back). True when it fired.
+ */
+function fireTailGun(
+  world: World,
+  train: TrainState,
+  index: number,
+  live: Map<number, number>,
+): boolean {
+  const size = world.rules.size;
+  const c = train.carriages[index] as Carriage;
+  const back = c.angle + Math.PI;
+  const behind = (h: { x: number; y: number }): boolean =>
+    Math.abs(shortAngle(wrapAngle(c.x, c.y, h.x, h.y, size) - back)) <= TAILGUN_ARC;
+  const target = nearestHostile(world, train, c.x, c.y, TAILGUN_RANGE, behind);
+  if (!target) return false;
+  const bearing = wrapAngle(c.x, c.y, target.x, target.y, size);
+  return fireVolley(world, train, c, TAILGUN, bearing, live, index) > 0;
+}
+
+/**
+ * Tesla coil: instant damage to the nearest hostile in range, then to the nearest other hostile
+ * near that one. Emits a zap event with the chain. True when anything was zapped.
+ */
+function zapTesla(world: World, train: TrainState, c: Carriage): boolean {
+  const first = nearestHostile(world, train, c.x, c.y, TESLA_RANGE);
+  if (!first) return false;
+  const second = nearestHostile(
+    world,
+    train,
+    first.x,
+    first.y,
+    TESLA_CHAIN_RANGE,
+    (h) => h.id !== first.id,
+  );
+  const points: Array<[number, number]> = [
+    [c.x, c.y],
+    [first.x, first.y],
+  ];
+  if (second) points.push([second.x, second.y]);
+  world.emit({ type: 'zap', ownerId: train.id, points, x: c.x, y: c.y });
+  const source: DamageSource = { kind: 'train', id: train.id };
+  damageHostile(world, first, TESLA_DAMAGE, source);
+  if (second) damageHostile(world, second, TESLA_DAMAGE, source);
+  return true;
+}
+
+/**
+ * Fires one shot of a weapon from a carriage along `aim`: its pellets spread evenly across
+ * aim ± spread. Each pellet counts toward the train's projectile budget, so a volley that reaches
+ * the budget part-way is cut short. Returns the number of projectiles fired.
+ */
+function fireVolley(
+  world: World,
+  train: TrainState,
+  c: Carriage,
+  stats: WeaponStats,
+  aim: number,
+  live: Map<number, number>,
+  carriage?: number,
+): number {
+  const pellets = stats.pellets ?? 1;
+  const spread = stats.spread ?? 0;
+  const inFlight = live.get(train.id) ?? 0;
+  const count = Math.min(pellets, MAX_TRAIN_PROJECTILES - inFlight);
+  if (count <= 0) return 0;
+  live.set(train.id, inFlight + count);
+  for (let k = 0; k < count; k++) {
+    const angle = pellets > 1 ? aim + spread * ((2 * k) / (pellets - 1) - 1) : aim;
     spawnProjectile(world, {
       kind: stats.projectile,
       x: c.x + Math.cos(aim) * WEAPON_MUZZLE_OFFSET,
       y: c.y + Math.sin(aim) * WEAPON_MUZZLE_OFFSET,
-      angle: aim,
+      angle,
       speed: stats.speed,
       damage: stats.damage,
-      life: PROJECTILE_LIFE,
+      life: stats.life ?? PROJECTILE_LIFE,
       splash: stats.splash,
+      pierce: stats.pierce,
       ownerKind: 'train',
       ownerId: train.id,
+      carriage,
     });
   }
+  return count;
 }
 
-/** Orbits counter-drones around the head and fires them at the nearest enemy in range. */
+/**
+ * Orbits counter-drones around the head and fires them at the nearest hostile in range: an enemy
+ * or another train's unprotected head.
+ */
 export function fireDrones(world: World, train: TrainState): void {
   const dt = world.dt;
   const size = world.rules.size;
@@ -295,16 +447,7 @@ export function fireDrones(world: World, train: TrainState): void {
     if (train.protectedFor > 0 || drone.fireTimer > 0) continue;
     const dx = train.x + Math.cos(drone.angle) * DRONE_ORBIT_RADIUS;
     const dy = train.y + Math.sin(drone.angle) * DRONE_ORBIT_RADIUS;
-    let best: EnemyState | null = null;
-    let bestDist = DRONE_RANGE;
-    for (const e of world.state.enemies) {
-      if (e.hull <= 0) continue;
-      const d = wrapDist(dx, dy, e.x, e.y, size);
-      if (d < bestDist) {
-        bestDist = d;
-        best = e;
-      }
-    }
+    const best = nearestHostile(world, train, dx, dy, DRONE_RANGE);
     if (!best) continue;
     drone.fireTimer = DRONE_COOLDOWN;
     spawnProjectile(world, {
@@ -323,10 +466,18 @@ export function fireDrones(world: World, train: TrainState): void {
 
 // ===== Projectiles =====
 
+interface ProjectileHit {
+  t: number;
+  enemy: EnemyState | null;
+  train: TrainState | null;
+}
+
 /**
  * Moves every projectile one tick. Hits are tested along the segment each projectile travels
- * (so fast shots cannot skip over targets), the earliest hit wins, and a projectile never
- * hits its owner. Train-owned shots hit enemies and other trains; enemy shots hit trains.
+ * (so fast shots cannot skip over targets) and applied in order along it until the projectile's
+ * pierce runs out; a projectile never hits its owner or the same target twice. Train-owned
+ * shots hit enemies and other trains; enemy shots hit trains. A projectile with pierce left
+ * carries on to the segment's end.
  */
 export function stepProjectiles(world: World): void {
   const s = world.state;
@@ -337,64 +488,83 @@ export function stepProjectiles(world: World): void {
   for (const p of s.projectiles) {
     const x1 = p.x + p.vx * dt;
     const y1 = p.y + p.vy * dt;
-    let bestT = Infinity;
-    let hitEnemy: EnemyState | null = null;
-    let hitTrain: TrainState | null = null;
+    const hits: ProjectileHit[] = [];
 
     if (p.ownerKind === 'train') {
       for (const e of s.enemies) {
-        if (e.hull <= 0) continue;
+        if (e.hull <= 0 || p.hitIds.includes(e.id)) continue;
         const r = e.kind === 'boss' ? BOSS_HIT_RADIUS : ENEMY_HIT_RADIUS;
         const t = segmentCircleHit(p.x, p.y, x1, y1, e.x, e.y, r, size);
-        if (t !== null && t < bestT) {
-          bestT = t;
-          hitEnemy = e;
-          hitTrain = null;
-        }
+        if (t !== null) hits.push({ t, enemy: e, train: null });
       }
     }
     for (const train of s.trains) {
-      if (!train.alive) continue;
+      if (!train.alive || p.hitIds.includes(train.id)) continue;
       if (p.ownerKind === 'train' && p.ownerId === train.id) continue;
       const t = segmentCircleHit(p.x, p.y, x1, y1, train.x, train.y, HEAD_RADIUS, size);
-      if (t !== null && t < bestT) {
-        bestT = t;
-        hitTrain = train;
-        hitEnemy = null;
-      }
+      if (t !== null) hits.push({ t, enemy: null, train });
     }
+    // Stable, so an exact tie keeps enemies before trains.
+    hits.sort((a, b) => a.t - b.t);
 
-    if (hitEnemy === null && hitTrain === null) {
-      p.x = wrapPos(x1, size);
-      p.y = wrapPos(y1, size);
-      p.life -= dt;
-      if (p.life > 0) kept.push(p);
-      continue;
-    }
-
-    const at = {
-      x: wrapPos(p.x + (x1 - p.x) * bestT, size),
-      y: wrapPos(p.y + (y1 - p.y) * bestT, size),
-    };
     const source: DamageSource = { kind: p.ownerKind, id: p.ownerId };
-    if (hitEnemy) damageEnemy(world, hitEnemy, p.damage, source, at);
-    else if (hitTrain) damageTrain(world, hitTrain, p.damage, source, at);
-
-    if (p.splash > 0) {
-      for (const e of s.enemies) {
-        if (e === hitEnemy || e.hull <= 0) continue;
-        if (wrapDist(at.x, at.y, e.x, e.y, size) < p.splash) {
-          damageEnemy(world, e, p.damage * SPLASH_DAMAGE_FACTOR, source, at);
-        }
+    for (const hit of hits) {
+      if (p.pierce <= 0) break;
+      p.pierce -= 1;
+      const at = {
+        x: wrapPos(p.x + (x1 - p.x) * hit.t, size),
+        y: wrapPos(p.y + (y1 - p.y) * hit.t, size),
+      };
+      if (hit.enemy) {
+        p.hitIds.push(hit.enemy.id);
+        damageEnemy(world, hit.enemy, p.damage, source, at);
+      } else if (hit.train) {
+        p.hitIds.push(hit.train.id);
+        damageTrain(world, hit.train, p.damage, source, at);
       }
+      if (p.splash > 0) splashAt(world, p, at, hit, source);
     }
+    if (p.pierce <= 0) continue;
+
+    p.x = wrapPos(x1, size);
+    p.y = wrapPos(y1, size);
+    p.life -= dt;
+    if (p.life > 0) kept.push(p);
   }
   s.projectiles = kept;
 }
 
 /**
+ * Splash damage around a hit: 60% of the projectile's damage to every other enemy and every
+ * other train's head within its splash radius, never the owner's.
+ */
+function splashAt(
+  world: World,
+  p: Projectile,
+  at: { x: number; y: number },
+  direct: ProjectileHit,
+  source: DamageSource,
+): void {
+  const size = world.rules.size;
+  const splash = p.damage * SPLASH_DAMAGE_FACTOR;
+  for (const e of world.state.enemies) {
+    if (e === direct.enemy || e.hull <= 0) continue;
+    if (wrapDist(at.x, at.y, e.x, e.y, size) < p.splash) {
+      damageEnemy(world, e, splash, source, at);
+    }
+  }
+  for (const train of world.state.trains) {
+    if (train === direct.train || !train.alive) continue;
+    if (p.ownerKind === 'train' && p.ownerId === train.id) continue;
+    if (wrapDist(at.x, at.y, train.x, train.y, size) < p.splash) {
+      damageTrain(world, train, splash, source, at);
+    }
+  }
+}
+
+/**
  * Ramming: any train head touching a non-boss enemy takes 40 damage and deals 20 to it, each
- * tick of contact.
+ * tick of contact. Cowcatchers raise the damage dealt and cut the damage taken (before shields).
  */
 export function ramEnemies(world: World): void {
   const size = world.rules.size;
@@ -403,8 +573,9 @@ export function ramEnemies(world: World): void {
     for (const e of world.state.enemies) {
       if (e.kind === 'boss' || e.hull <= 0) continue;
       if (wrapDist(train.x, train.y, e.x, e.y, size) >= RAM_RADIUS) continue;
-      damageTrain(world, train, RAM_DAMAGE_TO_TRAIN, { kind: 'enemy', id: e.id });
-      damageEnemy(world, e, RAM_DAMAGE_TO_ENEMY, { kind: 'train', id: train.id });
+      const taken = RAM_DAMAGE_TO_TRAIN * (1 - ramReductionOf(train));
+      damageTrain(world, train, taken, { kind: 'enemy', id: e.id });
+      damageEnemy(world, e, RAM_DAMAGE_TO_ENEMY + train.ramBonus, { kind: 'train', id: train.id });
       if (!train.alive) break;
     }
   }

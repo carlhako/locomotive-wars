@@ -9,6 +9,8 @@ import type { HitFlashSink } from './hitFlash.ts';
 import { burst, muzzleSparks } from './particles.ts';
 import type { ParticleSink, Rand } from './particles.ts';
 import type { ShakeSink } from './shake.ts';
+import type { TurretSink } from './turrets.ts';
+import type { ZapSink } from './zaps.ts';
 
 /** Everything a simulation event can turn into. Each member is a narrow interface for tests. */
 export interface FxTargets {
@@ -21,10 +23,14 @@ export interface FxTargets {
   killFeed: KillFeedSink;
   banner: BannerSink;
   sound: SoundPlayer;
+  turrets: TurretSink;
+  zaps: ZapSink;
 }
 
 /** Events farther than this from the local head make no sound. */
 export const AUDIBLE_RANGE = 900;
+/** A mine going off this close to the local head shakes the screen. */
+export const MINE_SHAKE_RANGE = 300;
 
 interface Known {
   name: string;
@@ -139,6 +145,7 @@ export function applyEvents(events: readonly SimEvent[], ctx: FxContext, fx: FxT
     switch (e.type) {
       case 'fired': {
         if (e.ownerKind !== 'train') break;
+        if (e.carriage !== undefined) fx.turrets.aim(e.ownerId, e.carriage, e.angle);
         muzzleSparks(
           fx.particles,
           e.x,
@@ -297,6 +304,34 @@ export function applyEvents(events: readonly SimEvent[], ctx: FxContext, fx: FxT
       case 'bridgeOff':
         if (e.trainId === localId) fx.sound.bridgeOff();
         break;
+
+      case 'zap': {
+        fx.zaps.add(e.points);
+        if (e.ownerId === localId || audible(e.x, e.y)) fx.sound.zap();
+        break;
+      }
+
+      case 'mineExploded': {
+        burst(
+          fx.particles,
+          e.x,
+          e.y,
+          {
+            count: 24,
+            speed: [50, 180],
+            life: [0.5, 1.1],
+            color: ['#ffaa44', '#ff4422', '#ffeb3b'],
+            size: [2, 5],
+            type: 'smoke',
+          },
+          rand,
+        );
+        if (e.ownerId === localId || audible(e.x, e.y)) fx.sound.mine();
+        if (local && wrapDist(e.x, e.y, local.x, local.y, ctx.size) < MINE_SHAKE_RANGE) {
+          fx.shake.add(8, 0.35);
+        }
+        break;
+      }
 
       case 'bossSpawn': {
         fx.sound.bossSpawn();

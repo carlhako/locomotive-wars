@@ -6,20 +6,27 @@ import {
   BRAKE_FACTOR,
   BRIDGE_MIN_INDEX,
   BRIDGE_RADIUS,
+  COWCATCHER_RAM_BONUS,
+  COWCATCHER_RAM_REDUCTION,
   DAMAGE_REDUCTION_CAP,
   FUEL_BONUS,
   FUEL_CAPACITY_PER_BONUS,
   FUEL_DRAIN,
   FUEL_MAX,
   FUEL_REGEN,
+  FUEL_REGEN_PER_BONUS,
   HULL_PER_CARRIAGE,
   HULL_REGEN,
   INITIAL_HULL,
   MAGNET_BONUS,
   PATH_MARGIN_CARRIAGES,
   PICKUP_RADIUS_BASE,
+  RAM_REDUCTION_CAP,
+  REPAIR_BONUS,
+  REPAIR_CAP,
   SHIELD_REDUCTION,
   SPEED_BONUS,
+  SPEED_BONUS_CAP,
   TURN_RATE,
 } from './constants.ts';
 import { clamp, TWO_PI, wrapDist, wrapPos } from './math.ts';
@@ -73,6 +80,10 @@ export function createTrain(spawn: TrainSpawn, rules: TrainRules): TrainState {
     fuelBonus: 0,
     magnetBonus: 0,
     damageReduction: 0,
+    repairBonus: 0,
+    ramBonus: 0,
+    ramReduction: 0,
+    cloaks: 0,
     path: createPath(spawn.x, spawn.y, spawn.angle),
     ai: {
       mode: 'wander',
@@ -94,7 +105,7 @@ export function createTrain(spawn: TrainSpawn, rules: TrainRules): TrainState {
   return train;
 }
 
-/** ref:540: 80 + 35 per carriage behind the locomotive + armor. */
+/** ref:540: 80 + 35 per carriage behind the locomotive + armor (70 per armor carriage). */
 export function maxHullOf(train: TrainState): number {
   return BASE_HULL + (train.carriages.length - 1) * HULL_PER_CARRIAGE + train.armorBonus;
 }
@@ -136,9 +147,29 @@ export function fuelCapacityOf(train: TrainState): number {
   return FUEL_MAX * (1 + train.fuelBonus * FUEL_CAPACITY_PER_BONUS);
 }
 
+/** Fuel regenerated per second while not boosting. */
+export function fuelRegenOf(train: TrainState): number {
+  return FUEL_REGEN * (1 + train.fuelBonus * FUEL_REGEN_PER_BONUS);
+}
+
+/** Speed multiplier from booster carriages, with the total bonus capped. */
+export function speedMultOf(train: Pick<TrainState, 'speedBonus'>): number {
+  return 1 + Math.min(train.speedBonus, SPEED_BONUS_CAP);
+}
+
 /** Fraction of incoming damage removed by shields (capped). */
 export function damageReductionOf(train: TrainState): number {
   return Math.min(DAMAGE_REDUCTION_CAP, train.damageReduction);
+}
+
+/** Fraction of ram damage taken removed by cowcatchers (capped), before shields apply. */
+export function ramReductionOf(train: TrainState): number {
+  return Math.min(RAM_REDUCTION_CAP, train.ramReduction);
+}
+
+/** Hull regenerated per second: the base rate plus repair cars (capped). */
+export function hullRegenOf(train: TrainState): number {
+  return HULL_REGEN + Math.min(REPAIR_CAP, train.repairBonus);
 }
 
 /**
@@ -175,6 +206,16 @@ export function addCarriage(
     case 'drones':
       train.drones.push({ angle: rng.range(0, TWO_PI), fireTimer: 0 });
       break;
+    case 'repair':
+      train.repairBonus += REPAIR_BONUS;
+      break;
+    case 'cowcatcher':
+      train.ramBonus += COWCATCHER_RAM_BONUS;
+      train.ramReduction += COWCATCHER_RAM_REDUCTION;
+      break;
+    case 'cloak':
+      train.cloaks += 1;
+      break;
     default:
       break;
   }
@@ -184,11 +225,11 @@ export function addCarriage(
 
 /**
  * Advances one tick of locomotion: turn, speed (boost, brake), position, trail, carriage
- * placement, and hull regeneration. Weapons and bridge checks are separate steps.
+ * placement, and hull regeneration (repair cars included). Weapons and bridge checks are separate steps.
  */
 export function advanceTrain(train: TrainState, dt: number, rules: TrainRules): void {
   const input = train.input;
-  const speedMult = 1 + train.speedBonus;
+  const speedMult = speedMultOf(train);
   let speed = BASE_SPEED * speedMult;
 
   if (!input.boost) train.boostLocked = false;
@@ -202,7 +243,7 @@ export function advanceTrain(train: TrainState, dt: number, rules: TrainRules): 
       train.boostLocked = true;
     }
   } else {
-    train.fuel = Math.min(fuelCapacityOf(train), train.fuel + FUEL_REGEN * dt);
+    train.fuel = Math.min(fuelCapacityOf(train), train.fuel + fuelRegenOf(train) * dt);
   }
   if (input.brake) speed *= BRAKE_FACTOR;
 
@@ -214,7 +255,7 @@ export function advanceTrain(train: TrainState, dt: number, rules: TrainRules): 
   trimPath(train.path, (rules.maxCarriages + PATH_MARGIN_CARRIAGES) * rules.spacing);
   placeCarriages(train, rules);
 
-  train.hull = Math.min(train.maxHull, train.hull + HULL_REGEN * dt);
+  train.hull = Math.min(train.maxHull, train.hull + hullRegenOf(train) * dt);
 }
 
 /** Recomputes carriage positions from the trail. */

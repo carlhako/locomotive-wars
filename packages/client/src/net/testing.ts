@@ -13,6 +13,7 @@ export function makeSnapshot(over: Partial<SnapshotMsg> & { st: number }): Snaps
     tl: [],
     dr: [],
     pr: [],
+    mn: [],
     ev: [],
     ...over,
   };

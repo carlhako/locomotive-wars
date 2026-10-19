@@ -33,7 +33,11 @@ describe('effects soak', () => {
         bossSpawn: () => {},
         bridgeOn: () => {},
         bridgeOff: () => {},
+        zap: () => {},
+        mine: () => {},
       },
+      turrets: { aim: () => {} },
+      zaps: { add: () => {} },
     };
     const emitter = new TrainEmitter();
     const names = new NameBook();

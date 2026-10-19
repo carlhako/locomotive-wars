@@ -192,6 +192,7 @@ export function viewFromSnapshot(
       vx: r[4],
       vy: r[5],
     })),
+    mines: snap.mn.map((r) => ({ id: r[0], ownerId: r[1], x: r[2], y: r[3], armed: r[4] === 1 })),
     minimap: [],
   };
 }

@@ -8,7 +8,7 @@ import type {
 } from '../sim/types.ts';
 
 /** Bumped on any incompatible change to the message shapes. */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /**
  * The wire protocol, JSON for the beta. Keys are short and entity lists are arrays of numbers to
@@ -28,6 +28,14 @@ export const PICKUP_KINDS = [
   'speed',
   'magnet',
   'fuel',
+  // Change 10: appended so the earlier indices keep their meaning.
+  'flak',
+  'mines',
+  'tailgun',
+  'tesla',
+  'repair',
+  'cowcatcher',
+  'cloak',
 ] as const satisfies readonly PickupKind[];
 export const ENEMY_KINDS = [
   'drone',
@@ -41,6 +49,7 @@ export const PROJECTILE_KINDS = [
   'laser',
   'drone',
   'enemy',
+  'flak',
 ] as const satisfies readonly ProjectileKind[];
 
 // Compile-time check that the lists above are complete.
@@ -248,6 +257,8 @@ export type TrailerRow = [number, number, number, number];
 export type DropRow = [number, number, number, number, number];
 /** `[id, kind index, x, y, vx, vy]`. */
 export type ProjectileRow = [number, number, number, number, number, number];
+/** `[id, ownerId, x, y, armed 0/1]`. Mines never move, so they are drawn where they are. */
+export type MineRow = [number, number, number, number, 0 | 1];
 
 /** Everything about the session's own train. */
 export interface OwnTrain {
@@ -286,6 +297,7 @@ export interface SnapshotMsg {
   tl: TrailerRow[];
   dr: DropRow[];
   pr: ProjectileRow[];
+  mn: MineRow[];
   ev: SimEvent[];
 }
 
@@ -518,6 +530,8 @@ export function decodeServerMessage(raw: string): ServerMessage | null {
         numRows(m.tl, 4) &&
         numRows(m.dr, 5) &&
         numRows(m.pr, 6) &&
+        numRows(m.mn, 5) &&
+        (m.mn as unknown[][]).every((r) => isFlag(r[4])) &&
         Array.isArray(m.ev) &&
         m.ev.every((e) => isObject(e) && typeof e.type === 'string')
       ) {

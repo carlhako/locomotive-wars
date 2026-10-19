@@ -73,14 +73,17 @@ Each tick runs in this order:
 
 1. Bot trains compute their input.
 2. Each living train: count down spawn protection, turn, move (boost, brake), extend its trail,
-   place carriages, regenerate hull, update the bridge flag, fire weapons and counter-drones.
+   place carriages, regenerate hull, update the bridge flag, fire weapons (held fire), auto weapons
+   (tail gunner, tesla coil), and counter-drones.
 3. Head-vs-body collisions between trains (see Train combat).
 4. The boss countdown (after 5 s of world time); the boss spawns at 0.
 5. Enemies move and shoot.
 6. Projectiles move and resolve hits along the segment each travelled.
-7. Pickups: every train collects trailers and drops within its pickup radius.
-8. Ramming between train heads and non-boss enemies.
-9. Expired drops and destroyed enemies are removed; trailers and enemies replenish.
+7. Mines: mine layers drop at their train's last carriage, mines age and expire, and armed mines
+   touched by an enemy or another train's head explode.
+8. Pickups: every train collects trailers and drops within its pickup radius.
+9. Ramming between train heads and non-boss enemies.
+10. Expired drops and destroyed enemies are removed; trailers and enemies replenish.
 
 Carriages sit a fixed arc length (18 units) behind the head along the head's trail, so spacing does
 not depend on speed or tick rate. The world wraps on both axes and every distance, hit test, and
@@ -122,17 +125,19 @@ One rule set applies to every train, human or bot.
 with `removeTrain`) come first in the next step's list. All carry positions (`x`, `y`) in world
 units.
 
-| `type`                 | Fields                                                           | When                                                            |
-| ---------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------- |
-| `fired`                | `weapon`, `ownerKind`, `ownerId`, `angle`                        | A weapon, counter-drone, enemy, or boss fires.                  |
-| `hit`                  | `victimKind`, `victimId`, `attackerKind`, `attackerId`, `amount` | Damage lands (shot, splash, or ram). `amount` is after shields. |
-| `enemyDestroyed`       | `enemyId`, `enemyKind`, `sourceId`                               | A non-boss enemy dies; `sourceId` is the crediting train.       |
-| `trainDestroyed`       | `victimId`, `cause`, `killerTrainId?`, `killerEnemyId?`          | A train is destroyed and drops half its carriages (see below).  |
-| `trainLeft`            | `trainId`                                                        | A living train is removed by its owner (disconnect); no kill.   |
-| `pickup`               | `trainId`, `pickupId`, `carriage`, `source`, `added`             | A trailer or drop is collected; `added` is false at the cap.    |
-| `bridgeOn`/`bridgeOff` | `trainId`                                                        | The head enters or leaves range of its own trail.               |
-| `bossSpawn`            | `enemyId`, `name`                                                | The boss appears.                                               |
-| `bossDown`             | `enemyId`, `name`, `sourceId`                                    | The boss is destroyed (it drops 5 pickups).                     |
+| `type`                 | Fields                                                           | When                                                                                                            |
+| ---------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `fired`                | `weapon`, `ownerKind`, `ownerId`, `angle`, `carriage?`           | A weapon, counter-drone, enemy, or boss fires. `carriage` is set for tail gunner shots.                         |
+| `hit`                  | `victimKind`, `victimId`, `attackerKind`, `attackerId`, `amount` | Damage lands (shot, splash, or ram). `amount` is after shields.                                                 |
+| `enemyDestroyed`       | `enemyId`, `enemyKind`, `sourceId`                               | A non-boss enemy dies; `sourceId` is the crediting train.                                                       |
+| `trainDestroyed`       | `victimId`, `cause`, `killerTrainId?`, `killerEnemyId?`          | A train is destroyed and drops half its carriages (see below).                                                  |
+| `trainLeft`            | `trainId`                                                        | A living train is removed by its owner (disconnect); no kill.                                                   |
+| `pickup`               | `trainId`, `pickupId`, `carriage`, `source`, `added`             | A trailer or drop is collected; `added` is false at the cap.                                                    |
+| `bridgeOn`/`bridgeOff` | `trainId`                                                        | The head enters or leaves range of its own trail.                                                               |
+| `bossSpawn`            | `enemyId`, `name`                                                | The boss appears.                                                                                               |
+| `bossDown`             | `enemyId`, `name`, `sourceId`                                    | The boss is destroyed (it drops 5 pickups).                                                                     |
+| `zap`                  | `ownerId`, `points`                                              | A tesla coil zaps: `points` is the coil, the first target, and the chained target if any; `x`, `y` is the coil. |
+| `mineExploded`         | `mineId`, `ownerId`                                              | A mine goes off, damaging everything but its owner in the blast.                                                |
 
 `trainDestroyed.cause` is `ram` (head into another train's body; `killerTrainId` is the body's
 owner), `weapon` (`killerTrainId` is the projectile's owner), `enemy` or `boss` (`killerEnemyId`).

@@ -26,6 +26,8 @@ function shot(over: Partial<Projectile>): Projectile {
     damage: 7,
     life: 1,
     splash: 0,
+    pierce: 1,
+    hitIds: [],
     ownerKind: 'train',
     ownerId: 9999,
     ...over,
@@ -376,6 +378,9 @@ describe('respawn', () => {
       'drones',
       'fuel',
       'magnet',
+      'repair',
+      'cowcatcher',
+      'cloak',
     ];
     const t = train(world, { carriages: kinds });
     t.alive = false;
@@ -384,6 +389,7 @@ describe('respawn', () => {
     expect(fresh.maxHull).toBe(80 + 35);
     expect(fresh.armorBonus + fresh.speedBonus + fresh.fuelBonus + fresh.magnetBonus).toBe(0);
     expect(fresh.damageReduction).toBe(0);
+    expect(fresh.repairBonus + fresh.ramBonus + fresh.ramReduction + fresh.cloaks).toBe(0);
     expect(fresh.drones).toHaveLength(0);
     world.setInput(t.id, { boost: false });
     const x0 = fresh.x;

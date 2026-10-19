@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DROP_LIFETIME, MAX_TRAILERS } from './constants.ts';
+import { DROP_LIFETIME, MAX_TRAILERS, TRAILER_TYPES } from './constants.ts';
+import { PICKUP_KINDS } from '../protocol/messages.ts';
 import { emptyWorld, ofType, run } from './testing.ts';
 import { World } from './world.ts';
 
@@ -187,6 +188,26 @@ describe('pickups', () => {
     expect(world.state.drops).toHaveLength(0);
     expect(train.carriages.at(-1)?.kind).toBe('shield');
     expect(ofType(events, 'pickup')[0]?.source).toBe('drop');
+  });
+});
+
+describe('carriage type draw', () => {
+  it('draws every pickup type in proportion to its rarity weight', () => {
+    expect(TRAILER_TYPES.map((t) => t.kind).sort()).toEqual([...PICKUP_KINDS].sort());
+    const world = new World({ seed: 42, initialTrailers: 0, initialEnemies: 0 });
+    const draws = 20000;
+    const counts = new Map<string, number>();
+    for (let i = 0; i < draws; i++) {
+      const kind = world.randomPickupKind();
+      counts.set(kind, (counts.get(kind) ?? 0) + 1);
+    }
+    const total = TRAILER_TYPES.reduce((sum, t) => sum + t.rarity, 0);
+    expect(total).toBeCloseTo(11.5);
+    for (const t of TRAILER_TYPES) {
+      const expected = t.rarity / total;
+      const share = (counts.get(t.kind) ?? 0) / draws;
+      expect(Math.abs(share - expected) / expected, t.kind).toBeLessThan(0.1);
+    }
   });
 });
 

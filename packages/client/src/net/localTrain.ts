@@ -4,6 +4,7 @@ import {
   BRAKE_FACTOR,
   DRONE_ORBIT_SPEED,
   SPEED_BONUS,
+  speedMultOf,
   TICK_RATE,
   TRAIN_FLAG_DEAD,
   TURN_RATE,
@@ -126,7 +127,7 @@ export class LocalTrain {
   ): void {
     const respawned = this.base !== null && this.base.me.sq !== me.sq;
     const before = this.base && !respawned ? this.sample(serverNow, now, input) : null;
-    this.base = { st, me, speedMult: 1 + SPEED_BONUS * speedCarriages };
+    this.base = { st, me, speedMult: speedMultOf({ speedBonus: SPEED_BONUS * speedCarriages }) };
     if (!before) {
       // A new train has nothing to blend from: show it where the server put it.
       this.corrX = this.corrY = this.corrA = 0;

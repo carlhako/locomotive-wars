@@ -11,11 +11,19 @@ function makeScenario(seed: number) {
       x: 1500,
       y: 1500,
       angle: 0,
-      carriages: ['mg', 'shield'],
+      carriages: ['mg', 'shield', 'mines', 'tesla'],
     }),
-    world.addTrain({ controller: 'human', x: 4000, y: 4000, angle: 2, carriages: ['laser'] }),
+    world.addTrain({
+      controller: 'human',
+      x: 4000,
+      y: 4000,
+      angle: 2,
+      carriages: ['laser', 'flak', 'tailgun', 'cowcatcher'],
+    }),
   ];
-  for (let i = 0; i < 3; i++) world.addTrain({ controller: 'bot', carriages: ['mg', 'speed'] });
+  for (let i = 0; i < 3; i++) {
+    world.addTrain({ controller: 'bot', carriages: ['mg', 'speed', 'mines', 'tailgun', 'repair'] });
+  }
   const apply = (tick: number) => {
     humans.forEach((h, i) => {
       world.setInput(h.id, {

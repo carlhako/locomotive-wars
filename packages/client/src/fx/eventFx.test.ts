@@ -18,6 +18,8 @@ interface Recorded {
   banners: { text: string; sub: string; color: string }[];
   popups: { text: string; color: string }[];
   sounds: string[];
+  turrets: { trainId: number; carriage: number; angle: number }[];
+  zaps: Array<ReadonlyArray<readonly [number, number]>>;
 }
 
 function recorder(): { fx: FxTargets; rec: Recorded } {
@@ -31,6 +33,8 @@ function recorder(): { fx: FxTargets; rec: Recorded } {
     banners: [],
     popups: [],
     sounds: [],
+    turrets: [],
+    zaps: [],
   };
   const sound: SoundPlayer = {
     shoot: (k: ProjectileKind) => rec.sounds.push(`shoot:${k}`),
@@ -42,6 +46,8 @@ function recorder(): { fx: FxTargets; rec: Recorded } {
     bossSpawn: () => rec.sounds.push('bossSpawn'),
     bridgeOn: () => rec.sounds.push('bridgeOn'),
     bridgeOff: () => rec.sounds.push('bridgeOff'),
+    zap: () => rec.sounds.push('zap'),
+    mine: () => rec.sounds.push('mine'),
   };
   const banner: BannerSink = {
     show: (text, sub, color) => rec.banners.push({ text, sub, color }),
@@ -60,6 +66,8 @@ function recorder(): { fx: FxTargets; rec: Recorded } {
     killFeed: { add: (e) => rec.feed.push(e) },
     banner,
     sound,
+    turrets: { aim: (trainId, carriage, angle) => rec.turrets.push({ trainId, carriage, angle }) },
+    zaps: { add: (points) => rec.zaps.push(points) },
   };
   return { fx, rec };
 }
@@ -384,6 +392,75 @@ describe('applyEvents', () => {
     expect(rec.sounds).toContain('bossSpawn');
     expect(rec.feed.map((f) => f.style)).toEqual(['system', 'boss']);
     expect(rec.shakes.map((s) => s.intensity)).toEqual([15, 20]);
+  });
+
+  it("turns a tail gunner's turret toward what it just shot at", () => {
+    const { rival, ctx } = scene();
+    const { fx, rec } = recorder();
+    const fired = (carriage?: number): SimEvent => ({
+      type: 'fired',
+      weapon: 'bullet',
+      ownerKind: 'train',
+      ownerId: rival.id,
+      x: 1180,
+      y: 1000,
+      angle: 3,
+      ...(carriage === undefined ? {} : { carriage }),
+    });
+    applyEvents([fired(), fired(2)], ctx, fx);
+    expect(rec.turrets).toEqual([{ trainId: rival.id, carriage: 2, angle: 3 }]);
+  });
+
+  it('draws a zap arc along the chain and crackles when in earshot', () => {
+    const { rival, far, ctx } = scene();
+    const { fx, rec } = recorder();
+    const zap = (ownerId: number, x: number, y: number): SimEvent => ({
+      type: 'zap',
+      ownerId,
+      points: [
+        [x, y],
+        [x + 100, y],
+        [x + 150, y + 60],
+      ],
+      x,
+      y,
+    });
+    applyEvents([zap(rival.id, 1200, 1000)], ctx, fx);
+    expect(rec.zaps).toEqual([
+      [
+        [1200, 1000],
+        [1300, 1000],
+        [1350, 1060],
+      ],
+    ]);
+    expect(rec.sounds).toEqual(['zap']);
+    applyEvents([zap(far.id, 4000, 4000)], ctx, fx);
+    expect(rec.zaps).toHaveLength(2);
+    expect(rec.sounds).toEqual(['zap']);
+  });
+
+  it('explodes a mine on screen with particles, a thump, and a shake when close', () => {
+    const { rival, far, ctx } = scene();
+    const { fx, rec } = recorder();
+    applyEvents(
+      [{ type: 'mineExploded', mineId: 50, ownerId: rival.id, x: 1100, y: 1000 }],
+      ctx,
+      fx,
+    );
+    expect(rec.particles.length).toBeGreaterThan(0);
+    expect(rec.particles.every((p) => Math.abs(p.x - 1100) < 20)).toBe(true);
+    expect(rec.sounds).toEqual(['mine']);
+    expect(rec.shakes).toHaveLength(1);
+
+    const quiet = recorder();
+    applyEvents(
+      [{ type: 'mineExploded', mineId: 51, ownerId: far.id, x: 1600, y: 1000 }],
+      ctx,
+      quiet.fx,
+    );
+    expect(quiet.rec.particles.length).toBeGreaterThan(0);
+    expect(quiet.rec.sounds).toEqual(['mine']);
+    expect(quiet.rec.shakes).toHaveLength(0);
   });
 
   it('plays pickup and bridge sounds only for the local train', () => {

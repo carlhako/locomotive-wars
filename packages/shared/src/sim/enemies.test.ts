@@ -81,6 +81,22 @@ describe('PvE enemies', () => {
     }
   });
 
+  it('cowcatchers soften rams and hit harder', () => {
+    const world = emptyWorld();
+    const train = world.addTrain({
+      protectedFor: 0,
+      carriages: ['cowcatcher', 'cowcatcher'],
+      x: 3000,
+      y: 3000,
+      angle: 0,
+    });
+    const drone = world.spawnEnemy('drone', 3006, 3000);
+    drone.shootTimer = 10;
+    const hits = ofType(world.step(), 'hit');
+    expect(hits.find((h) => h.victimId === train.id)?.amount).toBeCloseTo(32);
+    expect(hits.find((h) => h.victimId === drone.id)?.amount).toBe(60);
+  });
+
   it('drops one pickup when destroyed and removes the enemy', () => {
     const world = emptyWorld();
     world.addTrain({ protectedFor: 0, carriages: [], x: 3000, y: 3000, angle: 0 });
@@ -221,6 +237,8 @@ describe('boss', () => {
       damage: 14,
       life: 1,
       splash: 0,
+      pierce: 1,
+      hitIds: [],
       ownerKind: 'train',
       ownerId: train.id,
     });

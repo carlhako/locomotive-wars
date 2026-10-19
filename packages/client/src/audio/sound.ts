@@ -11,6 +11,10 @@ export interface SoundPlayer {
   bossSpawn(): void;
   bridgeOn(): void;
   bridgeOff(): void;
+  /** A tesla coil's crackle. */
+  zap(): void;
+  /** A mine going off: a low thump. */
+  mine(): void;
 }
 
 // ===== Mute persistence =====
@@ -61,6 +65,8 @@ const MIN_GAP_MS: Record<string, number> = {
   damage: 80,
   explosion: 90,
   pickup: 60,
+  zap: 70,
+  mine: 90,
 };
 
 export class SoundFX implements SoundPlayer {
@@ -173,6 +179,10 @@ export class SoundFX implements SoundPlayer {
       this.noise(0.06, 0.1, 4000);
     } else if (kind === 'drone') {
       this.blip(1200, 0.05, 0.06, 'square', -400);
+    } else if (kind === 'flak') {
+      // A dull, wide boom: five pellets at once.
+      this.noise(0.12, 0.2, 1800);
+      this.blip(140, 0.08, 0.1, 'square', -60);
     } else {
       this.noise(0.06, 0.18, 3500);
       this.blip(220, 0.04, 0.08, 'square', -80);
@@ -231,5 +241,18 @@ export class SoundFX implements SoundPlayer {
   bridgeOff(): void {
     if (!this.ready()) return;
     this.blip(440, 0.06, 0.1, 'sine', -200);
+  }
+
+  zap(): void {
+    if (!this.ready('zap')) return;
+    this.noise(0.05, 0.14, 6000, 4);
+    this.blip(1600, 0.04, 0.05, 'sawtooth', -900);
+    this.later(35, () => this.noise(0.05, 0.1, 5000, 4));
+  }
+
+  mine(): void {
+    if (!this.ready('mine')) return;
+    this.blip(70, 0.3, 0.32, 'sine', -35);
+    this.noise(0.25, 0.22, 450);
   }
 }

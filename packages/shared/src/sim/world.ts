@@ -40,6 +40,7 @@ import {
 } from './constants.ts';
 import { spawnBoss, spawnEnemyAt, stepEnemies } from './enemies.ts';
 import { clamp, TWO_PI, wrapDist, wrapPos } from './math.ts';
+import { stepMines } from './mines.ts';
 import { Rng } from './rng.ts';
 import {
   addCarriage,
@@ -113,6 +114,7 @@ export class World {
       trains: [],
       enemies: [],
       projectiles: [],
+      mines: [],
       trailers: [],
       drops: [],
       trailerTimer: 0,
@@ -259,7 +261,7 @@ export class World {
   }
 
   /**
-   * Starts a fresh round: clears enemies, projectiles, pickups, and the boss, regenerates
+   * Starts a fresh round: clears enemies, projectiles, mines, pickups, and the boss, regenerates
    * trailers and enemies, restarts the boss schedule, and respawns every train as a protected
    * starter with its round best and kills back at zero. The random source is reseeded, so a
    * round is reproducible from its seed and the inputs that follow.
@@ -272,6 +274,7 @@ export class World {
     this.events = [];
     s.enemies = [];
     s.projectiles = [];
+    s.mines = [];
     s.trailers = [];
     s.drops = [];
     s.bossId = null;
@@ -290,8 +293,9 @@ export class World {
   }
 
   /**
-   * Removes a train. With `drop`, half of a living train's carriages become pickups as in a
-   * destruction. A living train's removal is reported as a `trainLeft` event, never as a kill.
+   * Removes a train, and its mines with it. With `drop`, half of a living train's carriages
+   * become pickups as in a destruction. A living train's removal is reported as a `trainLeft`
+   * event, never as a kill.
    */
   removeTrain(id: number, opts: { drop?: boolean } = {}): boolean {
     const train = this.getTrain(id);
@@ -301,6 +305,7 @@ export class World {
       this.emit({ type: 'trainLeft', trainId: id, x: train.x, y: train.y });
     }
     this.state.trains = this.state.trains.filter((t) => t.id !== id);
+    this.state.mines = this.state.mines.filter((m) => m.ownerId !== id);
     return true;
   }
 
@@ -418,6 +423,7 @@ export class World {
 
     stepEnemies(this);
     stepProjectiles(this);
+    stepMines(this);
     this.collectPickups();
     ramEnemies(this);
     this.expireDrops();

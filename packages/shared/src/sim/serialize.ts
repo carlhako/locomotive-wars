@@ -19,6 +19,7 @@ export function serializeWorld(world: World): string {
     trains: s.trains,
     enemies: s.enemies,
     projectiles: s.projectiles,
+    mines: s.mines,
     trailers: s.trailers,
     drops: s.drops,
   });

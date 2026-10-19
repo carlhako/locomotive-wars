@@ -173,14 +173,14 @@ describe('carriages', () => {
       protectedFor: 0,
       carriages: ['armor', 'speed', 'speed', 'fuel', 'magnet', 'drones'],
     });
-    expect(train.armorBonus).toBe(35);
+    expect(train.armorBonus).toBe(70);
     expect(train.speedBonus).toBeCloseTo(0.14);
     expect(train.fuelBonus).toBeCloseTo(0.3);
     expect(pickupRadiusOf(train)).toBe(32 + 14);
     expect(train.drones).toHaveLength(1);
   });
 
-  it('computes max hull as 80 plus 35 per carriage behind the locomotive plus armor', () => {
+  it('computes max hull as 80 plus 35 per carriage behind the locomotive plus 70 per armor', () => {
     const world = emptyWorld();
     const plain = world.addTrain({ protectedFor: 0, carriages: [] });
     expect(maxHullOf(plain)).toBe(80);
@@ -189,7 +189,9 @@ describe('carriages', () => {
       protectedFor: 0,
       carriages: ['mg', 'armor', 'armor', 'shield'],
     });
-    expect(armored.maxHull).toBe(80 + 4 * 35 + 2 * 35);
+    expect(armored.maxHull).toBe(80 + 4 * 35 + 2 * 70);
+    const one = world.addTrain({ protectedFor: 0, carriages: ['armor'] });
+    expect(one.maxHull).toBe(80 + 35 + 70);
   });
 
   it('speed carriages raise speed', () => {
@@ -203,6 +205,53 @@ describe('carriages', () => {
     });
     run(world, 30);
     expect(train.x - 1000).toBeCloseTo(BASE_SPEED * 1.07, 6);
+  });
+
+  it('caps the booster bonus at +50% speed', () => {
+    const world = emptyWorld();
+    const train = world.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      angle: 0,
+      carriages: Array(12).fill('speed'),
+    });
+    expect(train.speedBonus).toBeCloseTo(0.84);
+    run(world, 30);
+    expect(train.x - 1000).toBeCloseTo(BASE_SPEED * 1.5, 6);
+  });
+
+  it('fuel tanks speed up fuel regeneration by 20% each', () => {
+    const world = emptyWorld();
+    const train = world.addTrain({
+      protectedFor: 0,
+      x: 1000,
+      y: 1000,
+      angle: 0,
+      carriages: ['fuel', 'fuel'],
+    });
+    train.fuel = 20;
+    run(world, 30);
+    expect(train.fuel).toBeCloseTo(20 + 12 * 1.4, 6);
+  });
+
+  it('repair cars add 1.5 hull/s each, capped at 6 hull/s', () => {
+    const world = emptyWorld();
+    const regenOver1s = (cars: number): number => {
+      const train = world.addTrain({
+        protectedFor: 0,
+        x: 1000 + cars * 500,
+        y: 1000,
+        angle: 0,
+        carriages: Array(cars).fill('repair'),
+      });
+      train.hull = 10;
+      const before = train.hull;
+      run(world, 30);
+      return train.hull - before;
+    };
+    expect(regenOver1s(2)).toBeCloseTo(0.25 + 3, 6);
+    expect(regenOver1s(6)).toBeCloseTo(0.25 + 6, 6);
   });
 
   it('shield reduction is capped at 70%', () => {

@@ -10,7 +10,7 @@ numbers to keep snapshots small. Binary encoding and delta compression are a lat
 
 ## Versioning
 
-`PROTOCOL_VERSION` (currently `5`) is bumped on any incompatible change to a message. The first
+`PROTOCOL_VERSION` (currently `6`) is bumped on any incompatible change to a message. The first
 message a client sends is `hello` carrying its version; a server that does not speak it replies
 `reject` with reason `version` and closes the socket. The client then tells the player to reload.
 
@@ -46,22 +46,22 @@ A client never sends a position. Unknown fields are dropped when a message is de
 
 ## Server to client
 
-| `t`          | Fields                                                                                                                             | When                                                                                                                                          |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `welcome`    | `v`, `id` (the session's train), `tickRate`, `snapRate`, `mapSize`, `interpMs`, `roundLengthSec`, `intermissionSec`, `idleKickSec` | Once, in reply to a good `hello`. `id` is promised now; the train appears when a round is playing.                                            |
-| `reject`     | `reason`: `version`, `full`, or `malformed`; for `full` also `humans`, `max`                                                       | Instead of `welcome`; the socket then closes.                                                                                                 |
-| `round`      | `phase` (`playing` or `intermission`), `roundId`, `endsAt` (server ms)                                                             | On join and at every phase change.                                                                                                            |
-| `roundEnd`   | `roundId`, `standings: [[id, name, isBot, best, kills]]`, `winnerId`, `nextRoundAt`                                                | When a round ends, and to a player who joins during the intermission.                                                                         |
-| `idleWarn`   | `secondsLeft`                                                                                                                      | The session has been idle until 10 s before the kick.                                                                                         |
-| `idleClear`  | none                                                                                                                               | The session did something; the warning is withdrawn.                                                                                          |
-| `kicked`     | `reason`: `idle`                                                                                                                   | Just before the server closes the socket with code 4000.                                                                                      |
-| `meta`       | `trains: [{id, name, color, ctl, kinds}]`, `gone: [id]`                                                                            | When a train is first in view, its carriage kinds change, or it leaves view. Always sent before the `snap` that needs it.                     |
-| `snap`       | see below                                                                                                                          | At the snapshot rate.                                                                                                                         |
-| `ov`         | `h: [[id, x, y, color, name]]`, `lb: [[id, name, best, now, isBot]]`, `rk`                                                         | At the overview rate: every living train for the minimap and kill feed, the top-10 leaderboard, and the session's own rank (`rk`, 0 if none). |
-| `pong`       | `c` (echoed), `st` server time (ms)                                                                                                | In reply to `ping`.                                                                                                                           |
-| `hsEligible` | `token`, `rank`, `score`                                                                                                           | At round end, to a player whose round best earned a place in the all-time table. The token is single-use, valid until the next round starts.  |
-| `hsResult`   | `ok`, `reason?`: `invalid`, `used`, `expired`, or `error`                                                                          | In reply to `hsName`.                                                                                                                         |
-| `highscores` | `entries: [[id, name, score]]`, `highlightIds`                                                                                     | When a round's results are added and whenever an entry is renamed, and to a player who joins during the intermission.                         |
+| `t`          | Fields                                                                                                                             | When                                                                                                                                                                                       |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `welcome`    | `v`, `id` (the session's train), `tickRate`, `snapRate`, `mapSize`, `interpMs`, `roundLengthSec`, `intermissionSec`, `idleKickSec` | Once, in reply to a good `hello`. `id` is promised now; the train appears when a round is playing.                                                                                         |
+| `reject`     | `reason`: `version`, `full`, or `malformed`; for `full` also `humans`, `max`                                                       | Instead of `welcome`; the socket then closes.                                                                                                                                              |
+| `round`      | `phase` (`playing` or `intermission`), `roundId`, `endsAt` (server ms)                                                             | On join and at every phase change.                                                                                                                                                         |
+| `roundEnd`   | `roundId`, `standings: [[id, name, isBot, best, kills]]`, `winnerId`, `nextRoundAt`                                                | When a round ends, and to a player who joins during the intermission.                                                                                                                      |
+| `idleWarn`   | `secondsLeft`                                                                                                                      | The session has been idle until 10 s before the kick.                                                                                                                                      |
+| `idleClear`  | none                                                                                                                               | The session did something; the warning is withdrawn.                                                                                                                                       |
+| `kicked`     | `reason`: `idle`                                                                                                                   | Just before the server closes the socket with code 4000.                                                                                                                                   |
+| `meta`       | `trains: [{id, name, color, ctl, kinds}]`, `gone: [id]`                                                                            | When a train is first in view, its carriage kinds change, or it leaves view. Always sent before the `snap` that needs it.                                                                  |
+| `snap`       | see below                                                                                                                          | At the snapshot rate.                                                                                                                                                                      |
+| `ov`         | `h: [[id, x, y, color, name]]`, `lb: [[id, name, best, now, isBot]]`, `rk`                                                         | At the overview rate: every living train for the minimap and kill feed (cloaked trains only in their own session's), the top-10 leaderboard, and the session's own rank (`rk`, 0 if none). |
+| `pong`       | `c` (echoed), `st` server time (ms)                                                                                                | In reply to `ping`.                                                                                                                                                                        |
+| `hsEligible` | `token`, `rank`, `score`                                                                                                           | At round end, to a player whose round best earned a place in the all-time table. The token is single-use, valid until the next round starts.                                               |
+| `hsResult`   | `ok`, `reason?`: `invalid`, `used`, `expired`, or `error`                                                                          | In reply to `hsName`.                                                                                                                                                                      |
+| `highscores` | `entries: [[id, name, score]]`, `highlightIds`                                                                                     | When a round's results are added and whenever an entry is renamed, and to a player who joins during the intermission.                                                                      |
 
 ### `snap`
 
@@ -76,6 +76,7 @@ A client never sends a position. Unknown fields are dropped when a message is de
 | `tl`  | Trailers: `[id, kind, x, y]`                                                                                                                                                                                                         |
 | `dr`  | Dropped pickups: `[id, kind, x, y, age]`                                                                                                                                                                                             |
 | `pr`  | Projectiles: `[id, kind, x, y, vx, vy]`                                                                                                                                                                                              |
+| `mn`  | Mines: `[id, ownerId, x, y, armed]` (`armed` is 0 or 1). Mines never move, so they are drawn where they are                                                                                                                          |
 | `ev`  | Simulation events since the previous snapshot (see below)                                                                                                                                                                            |
 
 - Kinds are indexes into `ENEMY_KINDS`, `PICKUP_KINDS`, and `PROJECTILE_KINDS`.
@@ -85,7 +86,8 @@ A client never sends a position. Unknown fields are dropped when a message is de
   does not blend the train's positions (and snaps its camera, for its own train), so a respawned
   train appears at its new spot instead of sweeping across the map.
 - `ev` holds raw simulation events. A `trainDestroyed` carries `victimId`, `cause` (`ram`, `weapon`,
-  `enemy`, `boss`), and `killerTrainId` or `killerEnemyId`.
+  `enemy`, `boss`), and `killerTrainId` or `killerEnemyId`. A `zap` carries its chain as `points`
+  (rounded like positions); a tail gunner's `fired` carries the firing `carriage` index.
 - Positions are rounded to whole units and angles to 2 decimals; angles are normalised to [-π, π].
 - Carriage angles are not sent. Each carriage points toward the one in front of it, which the client
   works out from the positions. Carriage kinds come from `meta`.
@@ -95,7 +97,8 @@ A client never sends a position. Unknown fields are dropped when a message is de
 
 A snapshot holds only what is within `VIEW_RADIUS` (wrapped distance) of the session's train head.
 A train counts as in view if its head or any carriage is. Distant trains are still on the minimap
-through the overview, which carries every living train.
+through the overview, which carries every living train except other players' cloaked ones (a
+cloaked train is still in snapshots, so it is drawn on the playfield).
 
 Events are filtered the same way: an event is sent if it happened within the radius or names the
 session's train. `trainDestroyed` is the exception: it goes to everyone, so the kill feed is global.

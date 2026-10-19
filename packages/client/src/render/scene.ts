@@ -2,10 +2,13 @@ import type { WorldView } from '@lw/shared';
 import type { DamageNumbers } from '../fx/damageNumbers.ts';
 import type { HitFlash } from '../fx/hitFlash.ts';
 import type { ParticleSystem } from '../fx/particles.ts';
+import type { TurretMemory } from '../fx/turrets.ts';
+import type { Zaps } from '../fx/zaps.ts';
 import { drawBridge } from './bridge.ts';
 import type { BridgeAnimator } from './bridge.ts';
 import type { DrawEnv } from './canvas.ts';
 import { drawEnemies } from './enemies.ts';
+import { drawMines } from './mines.ts';
 import { drawDrops, drawTrailers } from './pickups.ts';
 import { drawProjectiles } from './projectiles.ts';
 import { drawBackdrop } from './stars.ts';
@@ -19,6 +22,8 @@ export interface SceneFx {
   damageNumbers: DamageNumbers;
   hitFlash: HitFlash;
   bridges: BridgeAnimator;
+  turrets: TurretMemory;
+  zaps: Zaps;
 }
 
 /** Input-driven overlays: they depend on the player's controls, not the world. */
@@ -52,6 +57,7 @@ export function renderScene(
 
   drawTrailers(env, view.trailers);
   drawDrops(env, view.drops);
+  drawMines(env, view.mines, view.localId);
   drawEnemies(env, view.enemies, (id) => fx.hitFlash.isFlashing(id), view.time);
 
   const local = view.trains.find((t) => t.id === view.localId);
@@ -67,10 +73,12 @@ export function renderScene(
       localHead,
       aim: isLocal ? overlay.aim : null,
       flashing: fx.hitFlash.isFlashing(t.id),
+      turretAngle: (i) => fx.turrets.angleOf(t.id, i),
     });
   }
 
   drawProjectiles(env, view.projectiles);
+  fx.zaps.draw(env);
   fx.particles.draw(env);
   fx.damageNumbers.draw(env);
 

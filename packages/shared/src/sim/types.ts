@@ -3,15 +3,18 @@
  * server can snapshot it and tests can compare worlds structurally.
  */
 
-export type WeaponKind = 'mg' | 'missile' | 'laser';
-export type DefenseKind = 'shield' | 'drones' | 'armor';
-export type SupportKind = 'speed' | 'magnet' | 'fuel';
+/** Carriages that fire while the fire input is held. */
+export type WeaponKind = 'mg' | 'missile' | 'laser' | 'flak';
+/** Carriages that attack on their own, without fire input. */
+export type AutoKind = 'tailgun' | 'tesla' | 'mines';
+export type DefenseKind = 'shield' | 'drones' | 'armor' | 'cowcatcher';
+export type SupportKind = 'speed' | 'magnet' | 'fuel' | 'repair' | 'cloak';
 /** What a trailer or dropped pickup holds, and the carriage it becomes. */
-export type PickupKind = WeaponKind | DefenseKind | SupportKind;
+export type PickupKind = WeaponKind | AutoKind | DefenseKind | SupportKind;
 export type CarriageKind = 'locomotive' | PickupKind;
 
 export type EnemyKind = 'drone' | 'hunter' | 'sentry' | 'boss';
-export type ProjectileKind = 'bullet' | 'missile' | 'laser' | 'drone' | 'enemy';
+export type ProjectileKind = 'bullet' | 'missile' | 'laser' | 'drone' | 'enemy' | 'flak';
 export type Controller = 'human' | 'bot';
 /** Who owns a projectile, took damage, or dealt it. Trains and enemies share one id space. */
 export type EntityKind = 'train' | 'enemy';
@@ -103,6 +106,14 @@ export interface TrainState {
   magnetBonus: number;
   /** Damage reduction from shield carriages before the cap. */
   damageReduction: number;
+  /** Hull/s of extra regeneration from repair cars, before the cap. */
+  repairBonus: number;
+  /** Extra ram damage dealt to enemies, from cowcatchers. */
+  ramBonus: number;
+  /** Fraction of ram damage taken removed by cowcatchers, before the cap. */
+  ramReduction: number;
+  /** Cloak carriages: any hides the train from other players' minimaps. */
+  cloaks: number;
   path: PathSample[];
   ai: BotState;
   /** Seconds of spawn protection left; the train cannot be harmed, ram, or fire while above 0. */
@@ -146,10 +157,25 @@ export interface Projectile {
   damage: number;
   /** Seconds remaining. */
   life: number;
-  /** Splash radius against enemies; 0 for none. */
+  /** Splash radius against enemies and other trains' heads; 0 for none. */
   splash: number;
   ownerKind: EntityKind;
   ownerId: number;
+  /** Hits left before the projectile is consumed: 1 for most, more for a piercing laser. */
+  pierce: number;
+  /** Targets already hit (trains and enemies share one id space); each is hit at most once. */
+  hitIds: number[];
+}
+
+/** A mine dropped by a mine layer. It is armed once `age >= MINE_ARM_TIME`. */
+export interface Mine {
+  id: number;
+  x: number;
+  y: number;
+  /** The train that laid it; it never harms or is set off by that train. */
+  ownerId: number;
+  /** Seconds since it was dropped. */
+  age: number;
 }
 
 /** A trailer on the map or a dropped pickup. `age` only advances for drops. */
@@ -170,6 +196,8 @@ export type SimEvent =
       x: number;
       y: number;
       angle: number;
+      /** Tail gunner shots only: the firing carriage's index, so clients can turn its turret. */
+      carriage?: number;
     }
   | {
       type: 'hit';
@@ -223,6 +251,16 @@ export type SimEvent =
   | { type: 'bridgeOn'; trainId: number; x: number; y: number }
   | { type: 'bridgeOff'; trainId: number; x: number; y: number }
   | { type: 'bossSpawn'; enemyId: number; name: string; x: number; y: number }
+  | {
+      /** A tesla coil's instant chain: the coil, the first target, and the chained one if any. */
+      type: 'zap';
+      ownerId: number;
+      points: Array<[number, number]>;
+      /** The coil's position. */
+      x: number;
+      y: number;
+    }
+  | { type: 'mineExploded'; mineId: number; ownerId: number; x: number; y: number }
   | {
       type: 'bossDown';
       enemyId: number;
@@ -282,6 +320,7 @@ export interface WorldState {
   trains: TrainState[];
   enemies: EnemyState[];
   projectiles: Projectile[];
+  mines: Mine[];
   trailers: Pickup[];
   drops: Pickup[];
   trailerTimer: number;

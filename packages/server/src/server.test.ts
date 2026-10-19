@@ -294,6 +294,33 @@ describe('snapshots', () => {
     expect(ov?.h.find((r) => r[0] === b.id)?.[4]).toBe('B');
   });
 
+  it('leaves a cloaked train out of other overviews, but not its own or snapshots', async () => {
+    const port = await start({ config: NO_BOTS });
+    const a = await join(port, 'A');
+    const b = await join(port, 'B');
+    const ta = trainOf(a.id);
+    const tb = trainOf(b.id);
+    ta.x = 1000;
+    ta.y = 1000;
+    tb.x = 1400;
+    tb.y = 1000;
+    server!.world.addCarriage(b.id, 'cloak');
+    const seenBefore = a.of('ov').length;
+    await a.waitFor(() => a.of('ov').length >= seenBefore + 2 && b.of('ov').length >= 2);
+    const ovA = a.of('ov').at(-1)!;
+    const ovB = b.of('ov').at(-1)!;
+    expect(ovA.h.map((r) => r[0])).toEqual([a.id]);
+    expect(ovB.h.map((r) => r[0]).sort()).toEqual([a.id, b.id].sort());
+    // Still on A's playfield, and still on the leaderboard.
+    expect(
+      a
+        .of('snap')
+        .at(-1)!
+        .tr.some((r) => r[0] === b.id),
+    ).toBe(true);
+    expect(ovA.lb.some((r) => r[0] === b.id)).toBe(true);
+  });
+
   it('sends a distant train destruction to everyone (global kill feed)', async () => {
     const port = await start({ config: NO_BOTS });
     const a = await join(port, 'A');
@@ -318,6 +345,8 @@ describe('snapshots', () => {
       damage: 50,
       life: 1,
       splash: 0,
+      pierce: 1,
+      hitIds: [],
       ownerKind: 'train',
       ownerId: a.id,
     });
@@ -355,6 +384,8 @@ describe('snapshots', () => {
       damage: 50,
       life: 1,
       splash: 0,
+      pierce: 1,
+      hitIds: [],
       ownerKind: 'train',
       ownerId: a.id,
     });

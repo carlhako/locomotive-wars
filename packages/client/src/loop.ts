@@ -5,6 +5,8 @@ import type { FxTargets } from './fx/eventFx.ts';
 import { HitFlash } from './fx/hitFlash.ts';
 import { MAX_PARTICLES, ParticleSystem, TrainEmitter } from './fx/particles.ts';
 import { ScreenShake } from './fx/shake.ts';
+import { TurretMemory } from './fx/turrets.ts';
+import { Zaps } from './fx/zaps.ts';
 import { Banner, DamageFlash } from './hud/banner.ts';
 import { bindMuteButton, Hud } from './hud/hud.ts';
 import { KillFeed, KillFeedView } from './hud/killfeed.ts';
@@ -63,6 +65,8 @@ export class Game {
   private readonly damageNumbers = new DamageNumbers();
   private readonly hitFlash = new HitFlash();
   private readonly bridges = new BridgeAnimator();
+  private readonly turrets = new TurretMemory();
+  private readonly zaps = new Zaps();
   private readonly shake = new ScreenShake();
   private readonly emitter = new TrainEmitter();
   private readonly names = new NameBook();
@@ -99,6 +103,8 @@ export class Game {
       killFeed: this.killFeed,
       banner: this.banner,
       sound: this.sound,
+      turrets: this.turrets,
+      zaps: this.zaps,
     };
 
     bindMuteButton(this.sound.isMuted, (muted) => this.sound.setMuted(muted));
@@ -170,6 +176,8 @@ export class Game {
     this.particles.update(dt);
     this.damageNumbers.update(dt);
     this.hitFlash.update(dt);
+    this.turrets.update(dt);
+    this.zaps.update(dt);
     this.bridges.update(view.trains, dt);
     this.shake.update(dt);
     this.killFeed.update(dt);
@@ -186,6 +194,8 @@ export class Game {
         damageNumbers: this.damageNumbers,
         hitFlash: this.hitFlash,
         bridges: this.bridges,
+        turrets: this.turrets,
+        zaps: this.zaps,
       },
       {
         aim: this.aim,
@@ -214,6 +224,8 @@ export class Game {
     this.particles.clear();
     this.damageNumbers.clear();
     this.hitFlash.clear();
+    this.turrets.clear();
+    this.zaps.clear();
     this.killFeed.clear();
     this.names.clear();
   }
