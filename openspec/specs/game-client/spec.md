@@ -21,10 +21,20 @@ The client SHALL draw the world with the reference game's visual style:
 - enemies by type, and the boss with its shield
 - pulsing trailers and dropped pickups
 - projectiles by type
+- mines, with armed mines visibly different from unarmed ones and the player's own mines marked as friendly
+- tesla zaps as short-lived arcs along their chain
 
 #### Scenario: Bridge is visible
 - **WHEN** the world view marks a train's bridge as active
 - **THEN** a bridge effect is drawn at that train's head
+
+#### Scenario: Own mine marked
+- **WHEN** the local train's armed mine and another train's armed mine are both on screen
+- **THEN** the local train's mine is drawn with the friendly marking and the other is not
+
+#### Scenario: Zap arc
+- **WHEN** a zap event arrives with a coil and two target positions
+- **THEN** an arc is drawn from the coil to the first target and on to the second, fading out within half a second
 
 ### Requirement: Camera follows the local train
 The camera SHALL centre smoothly on the local player's train head and handle the wrapped world, drawing entities across the map seam at their nearest wrapped position.
@@ -34,11 +44,15 @@ The camera SHALL centre smoothly on the local player's train head and handle the
 - **THEN** the other train is drawn 30 units to the right of the local head
 
 ### Requirement: HUD and minimap
-The client SHALL show hull, boost fuel, and carriage count for the local train, and a minimap showing all trains' positions with the local train highlighted.
+The client SHALL show hull, boost fuel, and carriage count for the local train, and a minimap showing all trains' positions with the local train highlighted. The minimap SHALL NOT show other trains that have a cloak carriage.
 
 #### Scenario: Hull bar reflects damage
 - **WHEN** the local train's hull falls from 100% to 40%
 - **THEN** the hull bar and percentage show 40%
+
+#### Scenario: Cloaked bot offline
+- **WHEN** in offline mode a bot train picks up a cloak carriage
+- **THEN** that bot disappears from the minimap but is still drawn on the playfield when in view
 
 ### Requirement: Event-driven effects and sound
 The client SHALL present simulation events. Hits SHALL show damage numbers and sparks. Train and enemy destruction SHALL show explosions, and SHALL shake the screen when they involve the local train. Kills SHALL appear in the kill feed with killer and victim names. Boss events SHALL show the boss banner and boss hull bar. Matching procedural sounds SHALL play.
@@ -164,3 +178,17 @@ Every carriage type SHALL have its own colour, used consistently for its trailer
 #### Scenario: Support carriage icon
 - **WHEN** a train with a magnet carriage is on screen
 - **THEN** that carriage shows the magnet icon on its body
+
+### Requirement: New carriage effects and sounds
+The client SHALL play an explosion effect and sound for mine explosions, a crackle sound for tesla zaps, and a distinct firing sound for flak. Flak and tail gunner carriages SHALL have their own turret shapes, and the tail gunner's turret SHALL point at its target when firing and backward otherwise.
+
+#### Scenario: Mine explodes on screen
+- **WHEN** a mine-exploded event arrives for a position on screen
+- **THEN** an explosion effect is drawn there and the explosion sound plays
+
+### Requirement: Legend covers the full roster
+The carriage legend SHALL list every carriage type, including Flak under Weapons; Mine Layer, Tail Gunner, and Tesla Coil under an Auto weapons heading; Cowcatcher under Defence; and Repair Car and Cloak under Support.
+
+#### Scenario: Auto weapons section
+- **WHEN** the player expands the legend
+- **THEN** an Auto weapons section lists Mine Layer, Tail Gunner, and Tesla Coil with their descriptions
